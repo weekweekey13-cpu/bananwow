@@ -467,7 +467,7 @@ def main():
             time.sleep(300)
             log.error("Всё ещё нет BOT_TOKEN — бот не отвечает в Telegram, HTTP жив")
 
-    # polling с авто-рестартом (сеть / conflict)
+    # polling с авто-рестартом (сеть / Conflict если где-то ещё крутится тот же BOT_TOKEN)
     while True:
         try:
             app_bot = Application.builder().token(BOT_TOKEN).build()
@@ -483,10 +483,22 @@ def main():
                 ADMIN_USERNAMES,
                 PORT,
             )
-            app_bot.run_polling(drop_pending_updates=True)
-        except Exception:
-            log.exception("polling crashed, restart in 8s")
-            time.sleep(8)
+            # Важно: только ОДИН процесс с этим токеном (закрой START.bat / локальный bot.py)
+            app_bot.run_polling(
+                drop_pending_updates=True,
+                allowed_updates=Update.ALL_TYPES,
+            )
+        except Exception as e:
+            msg = str(e)
+            if "Conflict" in msg or "getUpdates" in msg:
+                log.error(
+                    "Conflict: где-то ещё запущен этот же бот (ПК / второй Render). "
+                    "Останови локальный bot.py / START.bat / run_stable. Retry 15s…"
+                )
+                time.sleep(15)
+            else:
+                log.exception("polling crashed, restart in 8s")
+                time.sleep(8)
 
 
 if __name__ == "__main__":
