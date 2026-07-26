@@ -20,3 +20,7 @@ screen/
 .idea/
 .vscode/
 *.pyc
+
+# GitHub Actions (push without workflow scope on PAT)
+.github/
+
