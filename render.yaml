@@ -8,7 +8,8 @@ services:
     plan: free
     region: frankfurt
     buildCommand: pip install -r requirements.txt
-    startCommand: python bot.py
+    # НЕ npm start — package.json только путает. Runtime = Python 3.
+    startCommand: bash start.sh
     # без healthCheckPath: если /api/ping не успел — Render ставит Failed
     envVars:
       # ОБЯЗАТЕЛЬНО задай в Dashboard, иначе бот не отвечает в TG

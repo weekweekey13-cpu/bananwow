@@ -24,3 +24,9 @@ screen/
 # GitHub Actions (push without workflow scope on PAT)
 .github/
 
+
+# Node leftovers — bot is Python-only on Render
+package.json
+bot.js
+package-lock.json
+
