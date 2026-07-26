@@ -434,10 +434,11 @@ def main():
         if u.strip()
     }
 
-    # HTTP сразу — иначе Render health-check (/api/ping) → Failed
-    http_thread = threading.Thread(target=start_http, daemon=True)
+    # HTTP сразу (Render / health / UptimeRobot). Не daemon: иначе процесс
+    # может завершиться, если polling ещё не стартовал.
+    http_thread = threading.Thread(target=start_http, daemon=False)
     http_thread.start()
-    time.sleep(0.4)
+    time.sleep(0.8)
     log.info(
         "Boot: port=%s webapp=%s token=%s",
         PORT,
