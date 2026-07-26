@@ -1,0 +1,100 @@
+========================================
+  BANANWOW С НУЛЯ (GitHub + Render)
+========================================
+Цель: бот 24/7 на https://….onrender.com
+как Калаграм, без твоего ПК.
+
+----------------------------------------
+ШАГ 0 — в Render удали старое (если есть)
+----------------------------------------
+dashboard.render.com → сервис bananwow / bananwow-1
+→ Settings → внизу Delete Web Service
+(чтобы не путаться со старыми настройками)
+
+----------------------------------------
+ШАГ 1 — GitHub (код уже залит)
+----------------------------------------
+Открой и проверь, что файлы есть:
+  https://github.com/weekweekey13-cpu/bananwow
+
+Должны быть: bot.py, requirements.txt, index.html, assets/
+
+Если репо пустое — запусти ЗАГРУЗИТЬ НА GITHUB.bat
+URL: https://github.com/weekweekey13-cpu/bananwow.git
+
+----------------------------------------
+ШАГ 2 — новый Web Service на Render
+----------------------------------------
+1. https://dashboard.render.com
+2. New +  →  Web Service
+3. Подключи GitHub (если спросит) → выбери репо:
+     weekweekey13-cpu / bananwow
+4. Заполни ТОЧНО так:
+
+   Name:              bananwow
+   Region:            Frankfurt (или любой)
+   Branch:            main
+   Root Directory:    (пусто)
+   Runtime:           Python 3
+   Build Command:     pip install -r requirements.txt
+   Start Command:     python bot.py
+   Instance type:     Free
+
+5. Environment Variables → Add:
+
+   Key:   BOT_TOKEN
+   Value: <токен бота от @BotFather>
+
+   Key:   ADMIN_USERNAMES
+   Value: bonamartin69
+
+   Key:   PYTHON_VERSION
+   Value: 3.12.8
+
+6. Create Web Service
+
+7. Жди 3–5 минут. Статус → Live (зелёный).
+
+----------------------------------------
+ШАГ 3 — проверка
+----------------------------------------
+Скопируй URL сверху страницы сервиса, например:
+  https://bananwow-xxxx.onrender.com
+
+Открой в браузере:
+  https://ТВОЙ.onrender.com/api/ping
+Должно: {"ok": true, ...}
+
+  https://ТВОЙ.onrender.com/
+Должна открыться игра.
+
+Впиши URL в файл PUBLIC-URL.txt (одна строка).
+
+Telegram → бот → /start → Play
+
+----------------------------------------
+ШАГ 4 — чтобы НЕ засыпал (как Калаграм)
+----------------------------------------
+1. https://uptimerobot.com/signUp  (бесплатно)
+2. Add New Monitor
+   Type:     HTTP(s)
+   URL:      https://ТВОЙ.onrender.com/api/ping
+   Interval: Every 5 minutes
+3. Create Monitor
+
+Или открой: https://ТВОЙ.onrender.com/keepalive-setup
+
+----------------------------------------
+ЕСЛИ FAILED / 127
+----------------------------------------
+• Runtime ОБЯЗАТЕЛЬНО Python 3 (не Node)
+• Start Command: python bot.py  (не npm start)
+• BOT_TOKEN в Environment + Save + Manual Deploy
+• Logs → последние строки — пришли мне
+
+----------------------------------------
+ТОКЕН БОТА
+----------------------------------------
+Лежит у тебя в тгбот\.env строка BOT_TOKEN=...
+Или @BotFather → /token
+НЕ выкладывай токен в GitHub / чаты.

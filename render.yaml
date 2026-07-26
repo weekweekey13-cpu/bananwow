@@ -1,24 +1,15 @@
-# Render Blueprint — бесплатный веб-сервис с HTTPS
-# Dashboard → New → Blueprint → этот репозиторий
-# После деплоя ОБЯЗАТЕЛЬНО задай BOT_TOKEN в Environment!
 services:
   - type: web
-    name: bananawow
+    name: bananwow
     runtime: python
     plan: free
     region: frankfurt
     buildCommand: pip install -r requirements.txt
-    # НЕ npm start — package.json только путает. Runtime = Python 3.
-    startCommand: bash start.sh
-    # без healthCheckPath: если /api/ping не успел — Render ставит Failed
+    startCommand: python bot.py
     envVars:
-      # ОБЯЗАТЕЛЬНО задай в Dashboard, иначе бот не отвечает в TG
+      - key: PYTHON_VERSION
+        value: "3.12.8"
       - key: BOT_TOKEN
         sync: false
       - key: ADMIN_USERNAMES
         value: bonamartin69
-      - key: PYTHON_VERSION
-        value: "3.12.8"
-      # WEBAPP_URL можно не задавать — подхватится RENDER_EXTERNAL_URL
-      # - key: WEBAPP_URL
-      #   sync: false

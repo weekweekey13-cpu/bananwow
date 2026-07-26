@@ -12,6 +12,9 @@ tools/
 ngrok*
 cloudflared*
 bore*
+package.json
+package-lock.json
+bot.js
 .tunnel_url
 cf_*.txt
 cf2.log
@@ -19,14 +22,4 @@ screen/
 .DS_Store
 .idea/
 .vscode/
-*.pyc
-
-# GitHub Actions (push without workflow scope on PAT)
 .github/
-
-
-# Node leftovers — bot is Python-only on Render
-package.json
-bot.js
-package-lock.json
-
