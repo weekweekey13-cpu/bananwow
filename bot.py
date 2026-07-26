@@ -228,18 +228,23 @@ class Handler(SimpleHTTPRequestHandler):
         age = None
         if _last_external_ping:
             age = int(time.time() - _last_external_ping)
+        has_token = bool(BOT_TOKEN)
         return {
             "ok": True,
             "app": APP_NAME,
             "version": APP_VERSION,
             "uptime_sec": int(time.time() - _started_at),
             "webapp_url": WEBAPP_URL or None,
+            "bot_token_set": has_token,
             "last_external_ping_sec_ago": age,
             "ping_url": "/api/ping",
             "setup_url": "/keepalive-setup",
             "hint": (
-                "Чтобы Render не засыпал: UptimeRobot → HTTP(s) → /api/ping каждые 5 мин. "
-                "Внутренний таймер сервер не будит."
+                "Нет BOT_TOKEN в Environment — добавь в Render и Redeploy."
+                if not has_token
+                else (
+                    "Чтобы Render не засыпал: UptimeRobot → /api/ping каждые 5 мин."
+                )
             ),
         }
 
@@ -416,8 +421,6 @@ def main():
 
     load_dotenv(ROOT / ".env", override=True)
     BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
-    if not BOT_TOKEN:
-        raise SystemExit("Нет BOT_TOKEN в .env или Environment Variables")
 
     try:
         PORT = int(os.getenv("PORT", "3000"))
@@ -431,32 +434,58 @@ def main():
         if u.strip()
     }
 
-    if not WEBAPP_URL:
-        log.warning(
-            "WEBAPP_URL пуст — для Telegram Mini App нужен HTTPS. "
-            "На Render задайте WEBAPP_URL или используйте RENDER_EXTERNAL_URL."
-        )
-    else:
-        set_menu_button(WEBAPP_URL if WEBAPP_URL.endswith("/") else WEBAPP_URL + "/")
-
+    # HTTP сразу — иначе Render health-check (/api/ping) → Failed
     http_thread = threading.Thread(target=start_http, daemon=True)
     http_thread.start()
-
-    app_bot = Application.builder().token(BOT_TOKEN).build()
-    app_bot.add_handler(CommandHandler("start", cmd_start))
-    app_bot.add_handler(CommandHandler("play", cmd_play))
-    app_bot.add_handler(PreCheckoutQueryHandler(pre_checkout))
-    app_bot.add_handler(
-        MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment)
-    )
-
+    time.sleep(0.4)
     log.info(
-        "Бот polling… WEBAPP_URL=%s admins=%s port=%s",
-        WEBAPP_URL,
-        ADMIN_USERNAMES,
+        "Boot: port=%s webapp=%s token=%s",
         PORT,
+        WEBAPP_URL or "(empty)",
+        "yes" if BOT_TOKEN else "MISSING",
     )
-    app_bot.run_polling(drop_pending_updates=True)
+
+    if not WEBAPP_URL:
+        log.warning(
+            "WEBAPP_URL пуст — на Render обычно есть RENDER_EXTERNAL_URL. "
+            "Кнопка Play может не работать, пока URL не определится."
+        )
+    elif BOT_TOKEN:
+        # не валим процесс, если Telegram API временно недоступен
+        try:
+            set_menu_button(WEBAPP_URL if WEBAPP_URL.endswith("/") else WEBAPP_URL + "/")
+        except Exception:
+            log.exception("set_menu_button (non-fatal)")
+
+    if not BOT_TOKEN:
+        # Не SystemExit: иначе Render = Failed. Держим HTTP и пишем в логи.
+        log.error(
+            "Нет BOT_TOKEN! Render → Environment → Add: BOT_TOKEN = токен @BotFather → Save → Manual Deploy"
+        )
+        while True:
+            time.sleep(300)
+            log.error("Всё ещё нет BOT_TOKEN — бот не отвечает в Telegram, HTTP жив")
+
+    # polling с авто-рестартом (сеть / conflict)
+    while True:
+        try:
+            app_bot = Application.builder().token(BOT_TOKEN).build()
+            app_bot.add_handler(CommandHandler("start", cmd_start))
+            app_bot.add_handler(CommandHandler("play", cmd_play))
+            app_bot.add_handler(PreCheckoutQueryHandler(pre_checkout))
+            app_bot.add_handler(
+                MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment)
+            )
+            log.info(
+                "Бот polling… WEBAPP_URL=%s admins=%s port=%s",
+                WEBAPP_URL,
+                ADMIN_USERNAMES,
+                PORT,
+            )
+            app_bot.run_polling(drop_pending_updates=True)
+        except Exception:
+            log.exception("polling crashed, restart in 8s")
+            time.sleep(8)
 
 
 if __name__ == "__main__":

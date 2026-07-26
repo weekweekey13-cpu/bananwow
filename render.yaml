@@ -9,12 +9,16 @@ services:
     region: frankfurt
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
+    # лёгкий health — не требует Telegram
     healthCheckPath: /api/ping
     envVars:
+      # ОБЯЗАТЕЛЬНО задай в Dashboard, иначе бот не отвечает в TG
       - key: BOT_TOKEN
         sync: false
       - key: ADMIN_USERNAMES
         value: bonamartin69
+      - key: PYTHON_VERSION
+        value: "3.12.8"
       # WEBAPP_URL можно не задавать — подхватится RENDER_EXTERNAL_URL
       # - key: WEBAPP_URL
       #   sync: false
