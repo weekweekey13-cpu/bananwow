@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BANANAWOW — не давать серверу спать</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color: #e8eaf0; background: #0b0d12; }
+    body { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; line-height: 1.45; }
+    h1 { font-size: 1.35rem; }
+    h2 { font-size: 1.05rem; margin-top: 1.6rem; color: #c9a227; }
+    a { color: #c9a227; }
+    .box { background: #151922; border: 1px solid #2a3145; border-radius: 12px; padding: 14px 16px; margin: 12px 0; }
+    code, .url { background: #1e2430; padding: 2px 8px; border-radius: 6px; word-break: break-all; font-size: 0.9rem; }
+    .url { display: block; padding: 10px 12px; margin: 8px 0; }
+    .btn { display: inline-block; margin: 6px 6px 6px 0; padding: 10px 14px; background: #c9a227; color: #0b0d12 !important;
+      text-decoration: none; border-radius: 10px; font-weight: 600; border: 0; cursor: pointer; font-size: 0.95rem; }
+    .btn.sec { background: #2a3145; color: #fff !important; }
+    .warn { color: #ffb84d; }
+    ol { padding-left: 1.25rem; }
+    li { margin: 0.4rem 0; }
+  </style>
+</head>
+<body>
+  <h1>⚡ BANANAWOW не спит</h1>
+  <p>
+    Бесплатный Render <b>засыпает ~через 15 минут</b> без визитов.
+    Внутренний таймер в боте <b>не помогает</b> — он тоже спит.
+    Нужен <b>внешний пинг каждые 5 минут</b> на URL ниже.
+  </p>
+
+  <div class="box">
+    <div>Пинг-URL (скопируй):</div>
+    <code class="url" id="ping-url">https://YOUR-SERVICE.onrender.com/api/ping</code>
+    <button class="btn" type="button" id="copy">Скопировать URL</button>
+    <a class="btn sec" id="check" href="/api/ping" target="_blank" rel="noopener">Проверить сейчас</a>
+  </div>
+
+  <h2>0. Cloudflare Worker — «второй сайт» который не спит</h2>
+  <p>
+    Бесплатный Worker на Cloudflare <b>не засыпает</b> как Render.
+    Раз в 5 минут он пингует бота. Код: <code>scripts/cloudflare-ping-worker.js</code>
+  </p>
+  <ol>
+    <li><a href="https://dash.cloudflare.com" target="_blank" rel="noopener">dash.cloudflare.com</a> → регистрация</li>
+    <li><b>Workers &amp; Pages</b> → Create → Create Worker</li>
+    <li>Вставь код из <code>cloudflare-ping-worker.js</code> (подставь свой URL) → Deploy</li>
+    <li>Triggers → Cron Triggers → <code>*/5 * * * *</code> (каждые 5 мин)</li>
+  </ol>
+  <a class="btn" href="https://dash.cloudflare.com" target="_blank" rel="noopener">Открыть Cloudflare</a>
+
+  <h2>1. UptimeRobot — самый простой</h2>
+  <p>Бесплатно, пинг раз в <b>5 минут</b>.</p>
+  <ol>
+    <li>Открой <a href="https://uptimerobot.com/signUp" target="_blank" rel="noopener">uptimerobot.com</a></li>
+    <li><b>Add New Monitor</b></li>
+    <li>Type: <b>HTTP(s)</b></li>
+    <li>Name: <b>BANANAWOW</b></li>
+    <li>URL: вставь пинг-URL выше</li>
+    <li>Interval: <b>Every 5 minutes</b></li>
+    <li>Create Monitor</li>
+  </ol>
+  <a class="btn" href="https://uptimerobot.com/signUp" target="_blank" rel="noopener">Открыть UptimeRobot</a>
+
+  <h2>2. cron-job.org</h2>
+  <ol>
+    <li><a href="https://cron-job.org/en/signup/" target="_blank" rel="noopener">Регистрация</a></li>
+    <li>Create cronjob → URL = пинг выше</li>
+    <li>Every <b>5 minutes</b></li>
+  </ol>
+
+  <h2>Проверка</h2>
+  <ol>
+    <li>Настрой UptimeRobot или Cloudflare</li>
+    <li>Не открывай бота 25–30 минут</li>
+    <li>В Telegram → /start → Play должен открыться сразу</li>
+    <li>Статус: <a id="health" href="/api/health">/api/health</a>
+      — смотри <code>last_external_ping_sec_ago</code></li>
+  </ol>
+
+  <script>
+    (function () {
+      var origin = location.origin;
+      var ping = origin + "/api/ping";
+      document.getElementById("ping-url").textContent = ping;
+      document.getElementById("check").href = ping;
+      document.getElementById("health").href = origin + "/api/health";
+      document.getElementById("copy").onclick = function () {
+        navigator.clipboard.writeText(ping).then(function () {
+          document.getElementById("copy").textContent = "Скопировано!";
+        });
+      };
+    })();
+  </script>
+</body>
+</html>

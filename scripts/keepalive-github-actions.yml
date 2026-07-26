@@ -1,0 +1,25 @@
+# Копия workflow — для справки. Основной файл: .github/workflows/keepalive.yml
+# Лучше UptimeRobot (keepalive-setup.html).
+name: Keep-alive
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Wake BANANAWOW
+        run: |
+          set -e
+          URL="https://YOUR-SERVICE.onrender.com/api/ping"
+          for i in 1 2 3 4 5; do
+            code=$(curl -sS -o /tmp/ka_body.txt -w "%{http_code}" --max-time 100 "$URL" || echo "000")
+            echo "try $i → HTTP $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 12
+          done
+          exit 1
