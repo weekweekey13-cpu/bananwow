@@ -23,3 +23,19 @@ screen/
 .idea/
 .vscode/
 .github/
+
+# local-only / clutter (not needed on Render)
+START.bat
+start_all.py
+run_stable.py
+Dockerfile
+.dockerignore
+DEPLOY.md
+tgtxt.txt
+Новый текстовый документ.txt
+ВЫЛОЖИТЬ В ИНТЕРНЕТ.bat
+ВЫЛОЖИТЬ В ИНТЕРНЕТ.html
+ЗАГРУЗИТЬ НА GITHUB.bat
+НАСТРОЙ KEEP-ALIVE.bat
+КАК_ЗАПУСТИТЬ.txt
+scripts/keepalive-github-actions.yml
