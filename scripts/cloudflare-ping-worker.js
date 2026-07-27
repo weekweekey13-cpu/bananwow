@@ -1,21 +1,17 @@
-// Cloudflare Worker — будит BANANAWOW каждые 5 мин (free, не засыпает как Render)
+// Cloudflare Worker — будит Render каждые 5 мин (бесплатно, сам не спит)
 //
 // 1) https://dash.cloudflare.com → Workers & Pages → Create Worker
-// 2) Вставь ВЕСЬ этот файл → Deploy
-// 3) Замени TARGET на свой Render URL (…/api/ping)
-// 4) Settings → Triggers → Cron Triggers → Add:
-//    */5 * * * *
-//
-// После деплоя Render: скопируй https://ВАШ-СЕРВИС.onrender.com/api/ping
+// 2) Вставь ВЕСЬ этот код → Deploy
+// 3) Settings → Triggers → Cron Triggers → Add:  */5 * * * *
 
-const TARGET = "https://YOUR-SERVICE.onrender.com/api/ping";
+const TARGET = "https://bananwow.onrender.com/api/ping";
 
 async function ping() {
   const started = Date.now();
   try {
     const res = await fetch(TARGET, {
       method: "GET",
-      headers: { "User-Agent": "bananawow-cf-keepalive/1.0" },
+      headers: { "User-Agent": "bananwow-keepalive/1.0" },
     });
     const text = await res.text();
     return {

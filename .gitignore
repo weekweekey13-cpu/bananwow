@@ -22,7 +22,6 @@ screen/
 .DS_Store
 .idea/
 .vscode/
-.github/
 
 # local-only / clutter (not needed on Render)
 START.bat
@@ -38,4 +37,4 @@ tgtxt.txt
 ЗАГРУЗИТЬ НА GITHUB.bat
 НАСТРОЙ KEEP-ALIVE.bat
 КАК_ЗАПУСТИТЬ.txt
-scripts/keepalive-github-actions.yml
+KEEP-ALIVE.txt
