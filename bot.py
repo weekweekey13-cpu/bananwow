@@ -44,7 +44,7 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.3.1"
 GAME_COST = 10  # мин. ставка (совместимость)
 STAKE_MIN = 10
 STAKE_MAX = 200
@@ -98,7 +98,7 @@ log = logging.getLogger("tgbot")
 app_bot: Application | None = None
 _started_at = time.time()
 _last_external_ping: float | None = None
-_db_lock = threading.Lock()
+_db_lock = threading.RLock()  # RLock: ensure_user внутри других db-функций
 
 
 # ── SQLite balance ──────────────────────────────────────────────
@@ -716,6 +716,7 @@ class Handler(SimpleHTTPRequestHandler):
         is_admin = admin or (soft and not verified)
         stake = clamp_stake(body.get("stake") or body.get("amount") or STAKE_MIN)
 
+        # --- admin: всегда free, первая игра = гарантированный win + 9⭐ ---
         if is_admin:
             bal = get_balance(int(uid)) if uid else 0
             free_first = bool(uid is not None and is_first_play_available(int(uid)))
@@ -743,14 +744,12 @@ class Handler(SimpleHTTPRequestHandler):
                     "isAdmin": True,
                     "sessionId": sid,
                     "willWin": will_win,
-                    "freePlayAvailable": False if free_first else (
-                        is_first_play_available(int(uid)) if uid else False
-                    ),
+                    "freePlayAvailable": False,
                 },
             )
             return
 
-        if not verified or uid is None:
+        if uid is None:
             self._json(
                 401,
                 {
@@ -762,39 +761,71 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         free_first = is_first_play_available(int(uid))
-        will_win = True if free_first else (random.random() < WIN_RATE)
-        prize = FREE_FIRST_PRIZE if free_first else prize_for_stake(stake)
-        spent = 0
-        bal = get_balance(int(uid))
 
+        # Первая free-игра: разрешаем даже без валидного initData (есть userId)
         if free_first:
             mark_first_play_done(int(uid))
-            # бесплатно, не списываем; приз 9 ⭐
-        else:
-            ok, bal = spend_for_game(int(uid), stake)
-            if not ok:
-                self._json(
-                    402,
-                    {
-                        "ok": False,
-                        "error": "insufficient",
-                        "balance": bal,
-                        "gameCost": stake,
-                        "stake": stake,
-                        "message": f"Недостаточно ⭐. Нужно {stake}, у вас {bal}.",
-                    },
-                )
-                return
-            spent = stake
+            bal = get_balance(int(uid))
+            sid = create_session(int(uid), True, FREE_FIRST_PRIZE, free=True)
+            log.info("play FREE-FIRST user=%s session=%s", uid, sid[:8])
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "free": True,
+                    "firstFree": True,
+                    "balance": bal,
+                    "gameCost": GAME_COST,
+                    "stake": 0,
+                    "stakeMin": STAKE_MIN,
+                    "stakeMax": STAKE_MAX,
+                    "winMultiplier": WIN_MULTIPLIER,
+                    "winPrize": FREE_FIRST_PRIZE,
+                    "tgWithdrawMin": TG_WITHDRAW_MIN,
+                    "spent": 0,
+                    "sessionId": sid,
+                    "willWin": True,
+                    "freePlayAvailable": False,
+                },
+            )
+            return
 
-        sid = create_session(int(uid), will_win, prize, free=free_first)
+        # Платные игры — нужна подпись initData
+        if not verified:
+            self._json(
+                401,
+                {
+                    "ok": False,
+                    "error": "open_in_telegram",
+                    "message": "Откройте игру заново через кнопку «Играть» в боте.",
+                },
+            )
+            return
+
+        will_win = random.random() < WIN_RATE
+        prize = prize_for_stake(stake)
+        ok, bal = spend_for_game(int(uid), stake)
+        if not ok:
+            self._json(
+                402,
+                {
+                    "ok": False,
+                    "error": "insufficient",
+                    "balance": bal,
+                    "gameCost": stake,
+                    "stake": stake,
+                    "message": f"Недостаточно ⭐. Нужно {stake}, у вас {bal}.",
+                },
+            )
+            return
+
+        sid = create_session(int(uid), will_win, prize, free=False)
         log.info(
-            "play user=%s bal=%s win=%s free=%s stake=%s prize=%s session=%s",
+            "play user=%s bal=%s win=%s stake=%s prize=%s session=%s",
             uid,
             bal,
             will_win,
-            free_first,
-            0 if free_first else stake,
+            stake,
             prize,
             sid[:8],
         )
@@ -802,17 +833,17 @@ class Handler(SimpleHTTPRequestHandler):
             200,
             {
                 "ok": True,
-                "free": free_first,
-                "firstFree": free_first,
+                "free": False,
+                "firstFree": False,
                 "balance": bal,
                 "gameCost": GAME_COST,
-                "stake": 0 if free_first else stake,
+                "stake": stake,
                 "stakeMin": STAKE_MIN,
                 "stakeMax": STAKE_MAX,
                 "winMultiplier": WIN_MULTIPLIER,
                 "winPrize": prize,
                 "tgWithdrawMin": TG_WITHDRAW_MIN,
-                "spent": spent,
+                "spent": stake,
                 "sessionId": sid,
                 "willWin": will_win,
                 "freePlayAvailable": False,
@@ -923,7 +954,15 @@ class Handler(SimpleHTTPRequestHandler):
 
         session_id = (body.get("sessionId") or body.get("session_id") or "").strip()
 
-        if not verified and not is_admin:
+        if uid is None:
+            self._json(
+                400,
+                {"ok": False, "error": "no_user", "message": "Нет user id"},
+            )
+            return
+
+        # claim по sessionId+userId (для free-first не требуем initData)
+        if not verified and not is_admin and not session_id:
             self._json(
                 401,
                 {
@@ -931,13 +970,6 @@ class Handler(SimpleHTTPRequestHandler):
                     "error": "open_in_telegram",
                     "message": "Откройте игру через Telegram-бота.",
                 },
-            )
-            return
-
-        if uid is None:
-            self._json(
-                400,
-                {"ok": False, "error": "no_user", "message": "Нет user id"},
             )
             return
 
@@ -967,8 +999,6 @@ class Handler(SimpleHTTPRequestHandler):
             )
             return
 
-        # prize уже начислен в claim_win — достанем сумму из ответа через ledger нет,
-        # вернём дельту баланса: перечитаем сессию
         prize_amt = WIN_PRIZE
         try:
             with _db_lock:
@@ -983,7 +1013,13 @@ class Handler(SimpleHTTPRequestHandler):
                     conn.close()
         except Exception:
             pass
-        log.info("claim user=%s prize=%s session=%s bal=%s", uid, prize_amt, session_id[:8], bal)
+        log.info(
+            "claim user=%s prize=%s session=%s bal=%s",
+            uid,
+            prize_amt,
+            session_id[:8] if session_id else "?",
+            bal,
+        )
         self._json(
             200,
             {

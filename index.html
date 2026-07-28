@@ -1377,40 +1377,60 @@
 
       function startRound(opts) {
         opts = opts || {};
-        if (typeof opts.sessionId === "string") sessionId = opts.sessionId;
-        if (typeof opts.willWin === "boolean") willWin = opts.willWin;
-        if (typeof opts.winPrize === "number" && opts.winPrize > 0) {
-          WIN_PRIZE = opts.winPrize;
-        }
-        prizeClaimed = false;
-
-        attemptsLeft = MAX_ATTEMPTS;
-        attemptsEl.textContent = String(attemptsLeft);
-        locked = false;
-        inRound = true;
-        openCount = 0;
-        openedOrder = [];
-        deck = generateRiggedDeck();
-        renderBoard();
-        boardEl.classList.remove("locked", "preview");
-        loseOverlay.classList.remove("show");
-        winOverlay.classList.remove("show");
-        claimBtn.classList.remove("hidden");
-        claimBtn.disabled = false;
-        claimBtn.textContent = "На баланс · " + WIN_PRIZE + " ⭐";
-        winAfterClaim.classList.add("hidden");
-        claimErr.textContent = "";
-        winPrizePill.textContent = "⭐ +" + WIN_PRIZE;
-        if (winLead) {
-          winLead.textContent =
-            "Три одинаковых! Забери " + WIN_PRIZE + " ⭐ на баланс (×" + WIN_MULTIPLIER + ").";
-        }
-        closeTopup();
-        tgWithdrawOverlay.classList.remove("show");
-        refreshPlayUi();
         try {
-          if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("medium");
-        } catch (_) {}
+          if (typeof opts.sessionId === "string") sessionId = opts.sessionId;
+          if (typeof opts.willWin === "boolean") willWin = opts.willWin;
+          if (typeof opts.winPrize === "number" && opts.winPrize > 0) {
+            WIN_PRIZE = opts.winPrize;
+          }
+          prizeClaimed = false;
+
+          attemptsLeft = MAX_ATTEMPTS;
+          if (attemptsEl) attemptsEl.textContent = String(attemptsLeft);
+          locked = false;
+          inRound = true;
+          openCount = 0;
+          openedOrder = [];
+          deck = generateRiggedDeck();
+          renderBoard();
+          if (boardEl) boardEl.classList.remove("locked", "preview");
+          if (loseOverlay) loseOverlay.classList.remove("show");
+          if (winOverlay) winOverlay.classList.remove("show");
+          if (claimBtn) {
+            claimBtn.classList.remove("hidden");
+            claimBtn.disabled = false;
+            claimBtn.textContent = "На баланс · " + WIN_PRIZE + " ⭐";
+          }
+          if (winAfterClaim) winAfterClaim.classList.add("hidden");
+          if (claimErr) claimErr.textContent = "";
+          if (winPrizePill) winPrizePill.textContent = "⭐ +" + WIN_PRIZE;
+          if (winLead) {
+            winLead.textContent =
+              "Три одинаковых! Забери " +
+              WIN_PRIZE +
+              " ⭐ на баланс" +
+              (WIN_PRIZE === FREE_FIRST_PRIZE
+                ? "."
+                : " (×" + WIN_MULTIPLIER + ").");
+          }
+          try {
+            closeTopup();
+          } catch (_) {}
+          try {
+            tgWithdrawOverlay.classList.remove("show");
+          } catch (_) {}
+          refreshPlayUi();
+          setTimeout(function () {
+            try {
+              if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
+            } catch (_) {}
+          }, 0);
+        } catch (e) {
+          console.error("startRound", e);
+          inRound = false;
+          locked = true;
+          showPlayError("Ошибка старта раунда. Попробуй ещё раз.");
+        }
       }
 
       // ── Лёгкий звук карты (1 осциллятор, без noise-буфера — не лагает WebView) ──
@@ -1813,31 +1833,84 @@
         }
       }
 
-      async function apiPost(path, body) {
+      async function apiPost(path, body, timeoutMs) {
+        const ms = timeoutMs || 12000;
         const endpoint = new URL(path, window.location.origin).href;
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body || {}),
-        });
-        let data = {};
+        const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+        const timer = ctrl
+          ? setTimeout(function () {
+              try {
+                ctrl.abort();
+              } catch (_) {}
+            }, ms)
+          : null;
         try {
-          data = await res.json();
-        } catch (_) {
-          throw new Error("Сервер не ответил (" + res.status + ")");
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body || {}),
+            signal: ctrl ? ctrl.signal : undefined,
+          });
+          let data = {};
+          try {
+            data = await res.json();
+          } catch (_) {
+            throw new Error("Сервер не ответил (код " + res.status + ")");
+          }
+          return { res, data };
+        } catch (e) {
+          if (e && (e.name === "AbortError" || e.message === "The user aborted a request.")) {
+            throw new Error("Сервер не отвечает. Попробуй ещё раз через пару секунд.");
+          }
+          throw e;
+        } finally {
+          if (timer) clearTimeout(timer);
         }
-        return { res, data };
       }
 
       function authBody(extra) {
+        var uid = localUserId();
+        // fallback: иногда initDataUnsafe пуст, а user в initData JSON
+        if (uid == null && tg && tg.initData) {
+          try {
+            var parts = String(tg.initData).split("&");
+            for (var i = 0; i < parts.length; i++) {
+              if (parts[i].indexOf("user=") === 0) {
+                var u = JSON.parse(decodeURIComponent(parts[i].slice(5)));
+                if (u && u.id) uid = u.id;
+              }
+            }
+          } catch (_) {}
+        }
         return Object.assign(
           {
             initData: (tg && tg.initData) || "",
             username: localUsername(),
-            userId: localUserId(),
+            userId: uid,
           },
           extra || {}
         );
+      }
+
+      function setBusy(on) {
+        loading = !!on;
+        if (playBtn) playBtn.disabled = !!on;
+        if (retryBtn) retryBtn.disabled = !!on;
+        if (winRetryBtn) winRetryBtn.disabled = !!on;
+        if (playBtn && on) {
+          playBtn.dataset.prevText = playBtn.textContent;
+          playBtn.textContent = "Загрузка…";
+        } else if (playBtn && playBtn.dataset.prevText) {
+          // text восстановит refreshPlayUi
+          delete playBtn.dataset.prevText;
+        }
+      }
+
+      function showPlayError(msg) {
+        if (hintLine) {
+          hintLine.textContent = msg || "Ошибка";
+          hintLine.className = "hint-line warn";
+        }
       }
 
       async function refreshMe() {
@@ -1875,11 +1948,8 @@
 
       async function startPlayFromBalance(errEl) {
         if (loading) return false;
-        loading = true;
-        playBtn.disabled = true;
-        retryBtn.disabled = true;
-        winRetryBtn.disabled = true;
         if (errEl) errEl.textContent = "";
+        setBusy(true);
 
         try {
           // Демо в браузере
@@ -1903,61 +1973,80 @@
               });
               return true;
             }
-            if (errEl) errEl.textContent = "Открой игру через Telegram-бота.";
-            hintLine.textContent = "Открой игру через кнопку «Играть» в боте";
-            hintLine.className = "hint-line warn";
+            const msg = "Открой игру через кнопку «Играть» в боте";
+            if (errEl) errEl.textContent = msg;
+            showPlayError(msg);
+            return false;
+          }
+
+          // нет user id — бесполезно ходить на сервер
+          const body = authBody({ stake: currentStake });
+          if (!body.userId && !isAdmin) {
+            const msg = "Не удалось определить аккаунт. Закрой и открой игру из бота.";
+            if (errEl) errEl.textContent = msg;
+            showPlayError(msg);
             return false;
           }
 
           if (!isAdmin && !freePlayAvailable && balance < currentStake) {
             openTopup();
-            hintLine.textContent = "Не хватает на ставку — пополни";
-            hintLine.className = "hint-line warn";
+            showPlayError("Не хватает на ставку — пополни");
             return false;
           }
 
-          const { res, data } = await apiPost(
-            "/api/play",
-            authBody({ stake: currentStake })
-          );
-          if (data.isAdmin) isAdmin = true;
-          if (typeof data.freePlayAvailable === "boolean") {
+          const { res, data } = await apiPost("/api/play", body, 12000);
+          if (data && data.isAdmin) isAdmin = true;
+          if (data && typeof data.freePlayAvailable === "boolean") {
             freePlayAvailable = data.freePlayAvailable;
-          } else if (data.firstFree || data.free) {
+          } else if (data && (data.firstFree || data.free)) {
             freePlayAvailable = false;
           }
 
-          if (data.ok) {
+          if (data && data.ok) {
+            freePlayAvailable = false;
             if (typeof data.balance === "number") setBalance(data.balance, true);
             else if (data.spent) setBalance(balance - data.spent, true);
             startRound({
               sessionId: data.sessionId || "",
               willWin: !!data.willWin,
-              winPrize: data.winPrize || previewPrize(),
+              winPrize:
+                typeof data.winPrize === "number" ? data.winPrize : previewPrize(),
             });
             return true;
           }
-          if (data.error === "insufficient" || res.status === 402) {
-            if (typeof data.balance === "number") setBalance(data.balance, false);
+
+          if ((data && data.error === "insufficient") || (res && res.status === 402)) {
+            if (data && typeof data.balance === "number") setBalance(data.balance, false);
             openTopup();
-            if (errEl) errEl.textContent = data.message || "Недостаточно ⭐";
+            const m = (data && data.message) || "Недостаточно ⭐";
+            if (errEl) errEl.textContent = m;
+            showPlayError(m);
             return false;
           }
-          if (data.error === "open_in_telegram" || res.status === 401) {
-            if (errEl) errEl.textContent = "Открой игру через Telegram-бота.";
+          if ((data && data.error === "open_in_telegram") || (res && res.status === 401)) {
+            const m =
+              (data && data.message) ||
+              "Открой игру заново через кнопку «Играть» в боте";
+            if (errEl) errEl.textContent = m;
+            showPlayError(m);
             return false;
           }
-          throw new Error(data.message || data.error || "Не удалось начать игру");
+          throw new Error(
+            (data && (data.message || data.error)) || "Не удалось начать игру"
+          );
         } catch (e) {
           console.error(e);
-          if (errEl) errEl.textContent = e.message || "Ошибка";
+          const m = (e && e.message) || "Ошибка запуска";
+          if (errEl) errEl.textContent = m;
+          showPlayError(m);
           return false;
         } finally {
-          loading = false;
-          playBtn.disabled = false;
-          retryBtn.disabled = false;
-          winRetryBtn.disabled = false;
-          refreshPlayUi();
+          setBusy(false);
+          try {
+            refreshPlayUi();
+          } catch (e2) {
+            console.warn(e2);
+          }
         }
       }
 
