@@ -44,9 +44,13 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.2.0"
-GAME_COST = 10  # стоимость одной игры в ⭐ с баланса
-WIN_PRIZE = 100  # приз за 3 одинаковых → на игровой баланс («Вывести»)
+APP_VERSION = "2.3.0"
+GAME_COST = 10  # мин. ставка (совместимость)
+STAKE_MIN = 10
+STAKE_MAX = 200
+WIN_MULTIPLIER = 10  # выигрыш = ставка × 10
+FREE_FIRST_PRIZE = 9  # приз за первую бесплатную игру
+WIN_PRIZE = STAKE_MIN * WIN_MULTIPLIER  # дефолт для UI (ставка 10 → 100)
 # Минимальная сумма вывода с игрового баланса в Telegram Stars
 TG_WITHDRAW_MIN = 110
 
@@ -59,6 +63,18 @@ WIN_RATE = max(0.0, min(1.0, WIN_RATE))
 
 # Пакеты пополнения: сколько ⭐ купить (= сумма XTR)
 TOPUP_PACKAGES = (10, 30, 50, 100, 250)
+
+
+def clamp_stake(raw) -> int:
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        n = STAKE_MIN
+    return max(STAKE_MIN, min(STAKE_MAX, n))
+
+
+def prize_for_stake(stake: int) -> int:
+    return int(stake) * WIN_MULTIPLIER
 
 DB_PATH = ROOT / "data" / "balances.db"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -542,7 +558,12 @@ class Handler(SimpleHTTPRequestHandler):
                 {
                     "stars": GAME_COST,
                     "gameCost": GAME_COST,
+                    "stakeMin": STAKE_MIN,
+                    "stakeMax": STAKE_MAX,
+                    "winMultiplier": WIN_MULTIPLIER,
+                    "freeFirstPrize": FREE_FIRST_PRIZE,
                     "winPrize": WIN_PRIZE,
+                    "tgWithdrawMin": TG_WITHDRAW_MIN,
                     "packages": list(TOPUP_PACKAGES),
                 },
             )
@@ -604,6 +625,10 @@ class Handler(SimpleHTTPRequestHandler):
             "webapp_url": WEBAPP_URL or None,
             "bot_token_set": has_token,
             "game_cost": GAME_COST,
+            "stake_min": STAKE_MIN,
+            "stake_max": STAKE_MAX,
+            "win_multiplier": WIN_MULTIPLIER,
+            "free_first_prize": FREE_FIRST_PRIZE,
             "win_prize": WIN_PRIZE,
             "tg_withdraw_min": TG_WITHDRAW_MIN,
             "win_rate": WIN_RATE,
@@ -668,6 +693,10 @@ class Handler(SimpleHTTPRequestHandler):
                 "userId": uid,
                 "balance": balance,
                 "gameCost": GAME_COST,
+                "stakeMin": STAKE_MIN,
+                "stakeMax": STAKE_MAX,
+                "winMultiplier": WIN_MULTIPLIER,
+                "freeFirstPrize": FREE_FIRST_PRIZE,
                 "winPrize": WIN_PRIZE,
                 "tgWithdrawMin": TG_WITHDRAW_MIN,
                 "freePlayAvailable": free_play,
@@ -678,23 +707,25 @@ class Handler(SimpleHTTPRequestHandler):
         )
 
     def _handle_play(self, body: dict):
-        """Списать GAME_COST (или free first), создать сессию (will_win)."""
+        """Списать ставку (или free first), создать сессию (will_win, prize)."""
         user, verified, uname, uid = self._resolve_user(body)
         admin = is_admin_user(user) if verified else False
         soft = bool(
             (body.get("username") or "").strip().lstrip("@").lower() in ADMIN_USERNAMES
         )
         is_admin = admin or (soft and not verified)
+        stake = clamp_stake(body.get("stake") or body.get("amount") or STAKE_MIN)
 
         if is_admin:
             bal = get_balance(int(uid)) if uid else 0
             free_first = bool(uid is not None and is_first_play_available(int(uid)))
             will_win = True if free_first else (random.random() < WIN_RATE)
+            prize = FREE_FIRST_PRIZE if free_first else prize_for_stake(stake)
             sid = ""
             if uid is not None:
                 if free_first:
                     mark_first_play_done(int(uid))
-                sid = create_session(int(uid), will_win, WIN_PRIZE, free=True)
+                sid = create_session(int(uid), will_win, prize, free=True)
             self._json(
                 200,
                 {
@@ -703,7 +734,11 @@ class Handler(SimpleHTTPRequestHandler):
                     "firstFree": free_first,
                     "balance": bal,
                     "gameCost": GAME_COST,
-                    "winPrize": WIN_PRIZE,
+                    "stake": 0 if free_first else stake,
+                    "stakeMin": STAKE_MIN,
+                    "stakeMax": STAKE_MAX,
+                    "winMultiplier": WIN_MULTIPLIER,
+                    "winPrize": prize,
                     "tgWithdrawMin": TG_WITHDRAW_MIN,
                     "isAdmin": True,
                     "sessionId": sid,
@@ -728,14 +763,15 @@ class Handler(SimpleHTTPRequestHandler):
 
         free_first = is_first_play_available(int(uid))
         will_win = True if free_first else (random.random() < WIN_RATE)
+        prize = FREE_FIRST_PRIZE if free_first else prize_for_stake(stake)
         spent = 0
         bal = get_balance(int(uid))
 
         if free_first:
             mark_first_play_done(int(uid))
-            # бесплатно, не списываем
+            # бесплатно, не списываем; приз 9 ⭐
         else:
-            ok, bal = spend_for_game(int(uid), GAME_COST)
+            ok, bal = spend_for_game(int(uid), stake)
             if not ok:
                 self._json(
                     402,
@@ -743,20 +779,23 @@ class Handler(SimpleHTTPRequestHandler):
                         "ok": False,
                         "error": "insufficient",
                         "balance": bal,
-                        "gameCost": GAME_COST,
-                        "message": f"Недостаточно ⭐. Нужно {GAME_COST}, у вас {bal}.",
+                        "gameCost": stake,
+                        "stake": stake,
+                        "message": f"Недостаточно ⭐. Нужно {stake}, у вас {bal}.",
                     },
                 )
                 return
-            spent = GAME_COST
+            spent = stake
 
-        sid = create_session(int(uid), will_win, WIN_PRIZE, free=free_first)
+        sid = create_session(int(uid), will_win, prize, free=free_first)
         log.info(
-            "play user=%s bal=%s win=%s free=%s session=%s",
+            "play user=%s bal=%s win=%s free=%s stake=%s prize=%s session=%s",
             uid,
             bal,
             will_win,
             free_first,
+            0 if free_first else stake,
+            prize,
             sid[:8],
         )
         self._json(
@@ -767,7 +806,11 @@ class Handler(SimpleHTTPRequestHandler):
                 "firstFree": free_first,
                 "balance": bal,
                 "gameCost": GAME_COST,
-                "winPrize": WIN_PRIZE,
+                "stake": 0 if free_first else stake,
+                "stakeMin": STAKE_MIN,
+                "stakeMax": STAKE_MAX,
+                "winMultiplier": WIN_MULTIPLIER,
+                "winPrize": prize,
                 "tgWithdrawMin": TG_WITHDRAW_MIN,
                 "spent": spent,
                 "sessionId": sid,
@@ -924,14 +967,30 @@ class Handler(SimpleHTTPRequestHandler):
             )
             return
 
-        log.info("claim user=%s prize session=%s bal=%s", uid, session_id[:8], bal)
+        # prize уже начислен в claim_win — достанем сумму из ответа через ledger нет,
+        # вернём дельту баланса: перечитаем сессию
+        prize_amt = WIN_PRIZE
+        try:
+            with _db_lock:
+                conn = _db()
+                try:
+                    row = conn.execute(
+                        "SELECT prize FROM sessions WHERE id = ?", (session_id,)
+                    ).fetchone()
+                    if row:
+                        prize_amt = int(row["prize"] or WIN_PRIZE)
+                finally:
+                    conn.close()
+        except Exception:
+            pass
+        log.info("claim user=%s prize=%s session=%s bal=%s", uid, prize_amt, session_id[:8], bal)
         self._json(
             200,
             {
                 "ok": True,
                 "balance": bal,
-                "prize": WIN_PRIZE,
-                "message": f"+{WIN_PRIZE} ⭐ на баланс",
+                "prize": prize_amt,
+                "message": f"+{prize_amt} ⭐ на баланс",
             },
         )
 
@@ -1026,12 +1085,13 @@ def start_http():
     log.info("HTTP http://0.0.0.0:%s  (игра + API + /api/ping)", PORT)
     log.info("Админы (free play): %s", ", ".join(sorted(ADMIN_USERNAMES)) or "(нет)")
     log.info(
-        "Игра=%s⭐ приз=%s⭐ tg_out≥%s win_rate=%.2f пакеты=%s",
-        GAME_COST,
-        WIN_PRIZE,
+        "Ставка %s–%s ⭐ ×%s | free-приз=%s | tg_out≥%s | win_rate=%.2f",
+        STAKE_MIN,
+        STAKE_MAX,
+        WIN_MULTIPLIER,
+        FREE_FIRST_PRIZE,
         TG_WITHDRAW_MIN,
         WIN_RATE,
-        TOPUP_PACKAGES,
     )
     server.serve_forever()
 
