@@ -44,7 +44,7 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.3.1"
+APP_VERSION = "2.4.0"
 GAME_COST = 10  # мин. ставка (совместимость)
 STAKE_MIN = 10
 STAKE_MAX = 200
@@ -153,7 +153,10 @@ def init_db() -> None:
                 CREATE TABLE IF NOT EXISTS users (
                     user_id INTEGER PRIMARY KEY,
                     first_play_done INTEGER NOT NULL DEFAULT 0,
-                    created_at REAL NOT NULL
+                    username TEXT,
+                    first_name TEXT,
+                    created_at REAL NOT NULL,
+                    last_seen REAL NOT NULL DEFAULT 0
                 )
                 """
             )
@@ -168,26 +171,59 @@ def init_db() -> None:
                 )
                 """
             )
+            # миграции старых БД
+            for col_sql in (
+                "ALTER TABLE users ADD COLUMN username TEXT",
+                "ALTER TABLE users ADD COLUMN first_name TEXT",
+                "ALTER TABLE users ADD COLUMN last_seen REAL NOT NULL DEFAULT 0",
+            ):
+                try:
+                    conn.execute(col_sql)
+                except sqlite3.OperationalError:
+                    pass
             conn.commit()
         finally:
             conn.close()
 
 
-def ensure_user(user_id: int) -> None:
+def ensure_user(
+    user_id: int,
+    username: str | None = None,
+    first_name: str | None = None,
+) -> None:
     uid = int(user_id)
     now = time.time()
+    uname = (username or "").strip().lstrip("@").lower() or None
+    fname = (first_name or "").strip() or None
     with _db_lock:
         conn = _db()
         try:
             row = conn.execute(
-                "SELECT user_id FROM users WHERE user_id = ?", (uid,)
+                "SELECT user_id, username, first_name FROM users WHERE user_id = ?",
+                (uid,),
             ).fetchone()
             if not row:
                 conn.execute(
-                    "INSERT INTO users (user_id, first_play_done, created_at) VALUES (?, 0, ?)",
-                    (uid, now),
+                    """
+                    INSERT INTO users
+                      (user_id, first_play_done, username, first_name, created_at, last_seen)
+                    VALUES (?, 0, ?, ?, ?, ?)
+                    """,
+                    (uid, uname, fname, now, now),
                 )
-                conn.commit()
+            else:
+                # обновляем ник / имя, если пришли
+                new_u = uname or row["username"]
+                new_f = fname or row["first_name"]
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET username = ?, first_name = ?, last_seen = ?
+                    WHERE user_id = ?
+                    """,
+                    (new_u, new_f, now, uid),
+                )
+            conn.commit()
         finally:
             conn.close()
 
@@ -218,6 +254,135 @@ def mark_first_play_done(user_id: int) -> None:
             conn.commit()
         finally:
             conn.close()
+
+
+def reset_all_game_data() -> dict:
+    """Полный сброс: балансы, free-игра, сессии, ledger, выводы."""
+    with _db_lock:
+        conn = _db()
+        try:
+            counts = {}
+            for table in (
+                "balances",
+                "users",
+                "sessions",
+                "ledger",
+                "tg_withdrawals",
+            ):
+                try:
+                    n = conn.execute(f"SELECT COUNT(*) AS c FROM {table}").fetchone()["c"]
+                    counts[table] = int(n)
+                    conn.execute(f"DELETE FROM {table}")
+                except sqlite3.OperationalError:
+                    counts[table] = 0
+            conn.commit()
+        finally:
+            conn.close()
+    return counts
+
+
+def display_name(user_id: int, username: str | None = None, first_name: str | None = None) -> str:
+    if username:
+        return f"@{username.lstrip('@')}"
+    if first_name:
+        return first_name
+    return f"id:{user_id}"
+
+
+def get_players(limit: int = 50) -> list[dict]:
+    limit = max(1, min(100, int(limit)))
+    with _db_lock:
+        conn = _db()
+        try:
+            rows = conn.execute(
+                """
+                SELECT u.user_id, u.username, u.first_name, u.first_play_done,
+                       u.last_seen, u.created_at,
+                       COALESCE(b.stars, 0) AS stars
+                FROM users u
+                LEFT JOIN balances b ON b.user_id = u.user_id
+                ORDER BY u.last_seen DESC, u.created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+
+def get_transactions(limit: int = 30) -> list[dict]:
+    limit = max(1, min(100, int(limit)))
+    with _db_lock:
+        conn = _db()
+        try:
+            rows = conn.execute(
+                """
+                SELECT l.id, l.user_id, l.delta, l.reason, l.payload, l.created_at,
+                       u.username, u.first_name
+                FROM ledger l
+                LEFT JOIN users u ON u.user_id = l.user_id
+                ORDER BY l.id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+
+def get_stats() -> dict:
+    with _db_lock:
+        conn = _db()
+        try:
+            users_n = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
+            free_left = conn.execute(
+                "SELECT COUNT(*) AS c FROM users WHERE first_play_done = 0"
+            ).fetchone()["c"]
+            played = conn.execute(
+                "SELECT COUNT(*) AS c FROM users WHERE first_play_done = 1"
+            ).fetchone()["c"]
+            bal_sum = conn.execute(
+                "SELECT COALESCE(SUM(stars), 0) AS s FROM balances"
+            ).fetchone()["s"]
+            plays = conn.execute(
+                "SELECT COUNT(*) AS c FROM ledger WHERE reason = 'play'"
+            ).fetchone()["c"]
+            topups = conn.execute(
+                "SELECT COALESCE(SUM(delta), 0) AS s FROM ledger WHERE reason = 'topup' OR reason LIKE 'topup%'"
+            ).fetchone()["s"]
+            wins = conn.execute(
+                "SELECT COALESCE(SUM(delta), 0) AS s FROM ledger WHERE reason = 'win_claim'"
+            ).fetchone()["s"]
+            stakes = conn.execute(
+                "SELECT COALESCE(SUM(-delta), 0) AS s FROM ledger WHERE reason = 'play' AND delta < 0"
+            ).fetchone()["s"]
+            return {
+                "users": int(users_n),
+                "free_left": int(free_left),
+                "played_free": int(played),
+                "balance_sum": int(bal_sum),
+                "plays": int(plays),
+                "topups": int(topups),
+                "wins_paid": int(wins),
+                "stakes_burned": int(stakes),
+            }
+        finally:
+            conn.close()
+
+
+def reason_ru(reason: str) -> str:
+    r = (reason or "").lower()
+    if r == "play":
+        return "ставка"
+    if r == "win_claim":
+        return "выигрыш"
+    if r == "topup" or r.startswith("topup"):
+        return "пополнение"
+    if r == "tg_withdraw":
+        return "вывод"
+    return reason or "?"
 
 
 def withdraw_to_telegram(user_id: int, amount: int = TG_WITHDRAW_MIN) -> tuple[bool, int, str]:
@@ -668,9 +833,17 @@ class Handler(SimpleHTTPRequestHandler):
         )
         is_admin = admin or (soft and not verified)
 
+        # имя из initData, если есть
+        first_name = None
+        if user:
+            first_name = user.get("first_name") or None
+            if not uname:
+                uname = (user.get("username") or "").lower() or None
+
         balance = 0
         free_play = False
         if uid is not None:
+            ensure_user(int(uid), uname, first_name)
             balance = get_balance(int(uid))
             free_play = is_first_play_available(int(uid))
 
@@ -759,6 +932,10 @@ class Handler(SimpleHTTPRequestHandler):
                 },
             )
             return
+
+        # сохраняем ник
+        first_name = (user or {}).get("first_name") if user else None
+        ensure_user(int(uid), uname, first_name)
 
         free_first = is_first_play_available(int(uid))
 
@@ -1147,26 +1324,49 @@ def play_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
+def is_admin_message(user) -> bool:
+    if not user:
+        return False
+    uname = (user.username or "").strip().lstrip("@").lower()
+    return bool(uname and uname in ADMIN_USERNAMES)
+
+
+def _fmt_ts(ts: float) -> str:
+    try:
+        return time.strftime("%d.%m %H:%M", time.localtime(float(ts)))
+    except Exception:
+        return "?"
+
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
     user = update.effective_user
+    if user:
+        ensure_user(
+            user.id,
+            user.username,
+            user.first_name,
+        )
     uname = (user.username or "").lower() if user else ""
     bal = get_balance(user.id) if user else 0
+    free = is_first_play_available(user.id) if user else False
     if uname in ADMIN_USERNAMES:
         text = (
             "👑 Админ-режим\n\n"
-            "Найди 3 одинаковых фрукта за 3 хода.\n"
-            "Ты играешь бесплатно.\n\n"
+            "Команды: /admin\n"
+            "Найди 3 одинаковых · ставка ×10\n"
             "Жми «Играть» 👇"
         )
     else:
+        free_line = "🎁 Первая игра бесплатно!\n" if free else ""
         text = (
             "🎰 BANANAWOW\n\n"
+            f"{free_line}"
             "Найди 3 одинаковых фрукта за 3 хода.\n"
-            f"Одна игра — {GAME_COST} ⭐ с баланса.\n"
-            f"Твой баланс: {bal} ⭐\n\n"
-            "Пополни звёзды в игре и испытай удачу!"
+            f"Ставка {STAKE_MIN}–{STAKE_MAX} ⭐ · выигрыш ×{WIN_MULTIPLIER}\n"
+            f"Баланс: {bal} ⭐\n\n"
+            "Жми «Играть» 👇"
         )
     await update.message.reply_text(text, reply_markup=play_keyboard())
 
@@ -1175,9 +1375,11 @@ async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
     user = update.effective_user
+    if user:
+        ensure_user(user.id, user.username, user.first_name)
     bal = get_balance(user.id) if user else 0
     await update.message.reply_text(
-        f"Баланс: {bal} ⭐ · игра — {GAME_COST} ⭐",
+        f"Баланс: {bal} ⭐ · ставка {STAKE_MIN}–{STAKE_MAX} ⭐",
         reply_markup=play_keyboard(),
     )
 
@@ -1185,12 +1387,149 @@ async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_user:
         return
-    bal = get_balance(update.effective_user.id)
+    u = update.effective_user
+    ensure_user(u.id, u.username, u.first_name)
+    bal = get_balance(u.id)
+    free = is_first_play_available(u.id)
+    free_txt = "да 🎁" if free else "нет"
     await update.message.reply_text(
-        f"⭐ Твой баланс: {bal}\n"
-        f"Одна игра — {GAME_COST} ⭐\n\n"
-        "Пополнить можно прямо в мини-приложении.",
+        f"⭐ Баланс: {bal}\n"
+        f"Бесплатная игра: {free_txt}\n"
+        f"Ставка {STAKE_MIN}–{STAKE_MAX} ⭐ · приз ×{WIN_MULTIPLIER}\n\n"
+        "Пополнить можно в мини-приложении.",
         reply_markup=play_keyboard(),
+    )
+
+
+async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.effective_user:
+        return
+    if not is_admin_message(update.effective_user):
+        await update.message.reply_text("⛔ Только для админа.")
+        return
+    await update.message.reply_text(
+        "👑 Админ-команды BANANAWOW\n\n"
+        "/reset — сброс всех игроков (free снова у всех)\n"
+        "/reset_confirm — подтвердить сброс\n"
+        "/players — никнеймы / id игравших\n"
+        "/tx — последние транзакции\n"
+        "/tx 50 — транзакции (до 100)\n"
+        "/stats — сводка\n\n"
+        "Админы: " + ", ".join("@" + a for a in sorted(ADMIN_USERNAMES)),
+    )
+
+
+async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.effective_user:
+        return
+    if not is_admin_message(update.effective_user):
+        await update.message.reply_text("⛔ Только для админа.")
+        return
+    await update.message.reply_text(
+        "⚠️ Это обнулит ВСЕХ игроков:\n"
+        "• балансы\n"
+        "• free-игры (снова всем можно 1 раз бесплатно)\n"
+        "• сессии и историю транзакций\n"
+        "• заявки на вывод\n\n"
+        "Чтобы подтвердить, отправь:\n"
+        "/reset_confirm"
+    )
+
+
+async def cmd_reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.effective_user:
+        return
+    if not is_admin_message(update.effective_user):
+        await update.message.reply_text("⛔ Только для админа.")
+        return
+    counts = reset_all_game_data()
+    log.warning(
+        "ADMIN RESET by @%s counts=%s",
+        update.effective_user.username,
+        counts,
+    )
+    lines = [f"• {k}: {v}" for k, v in counts.items()]
+    await update.message.reply_text(
+        "✅ Сброс выполнен.\n"
+        "Все как будто никогда не заходили — free-игра снова у каждого.\n\n"
+        "Удалено:\n" + "\n".join(lines) + "\n\n"
+        "⚠️ У игроков в телефоне может остаться кэш кнопки — "
+        "пусть закроют мини-приложение и откроют снова."
+    )
+
+
+async def cmd_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.effective_user:
+        return
+    if not is_admin_message(update.effective_user):
+        await update.message.reply_text("⛔ Только для админа.")
+        return
+    rows = get_players(60)
+    if not rows:
+        await update.message.reply_text("Пока никого нет.")
+        return
+    lines = [f"👥 Игроки ({len(rows)}):\n"]
+    for r in rows:
+        name = display_name(r["user_id"], r.get("username"), r.get("first_name"))
+        free = "free✓" if int(r.get("first_play_done") or 0) == 0 else "free✗"
+        stars = int(r.get("stars") or 0)
+        seen = _fmt_ts(r.get("last_seen") or r.get("created_at") or 0)
+        lines.append(f"• {name} · {stars}⭐ · {free} · {seen}")
+    text = "\n".join(lines)
+    # Telegram limit ~4096
+    if len(text) > 4000:
+        text = text[:3900] + "\n…"
+    await update.message.reply_text(text)
+
+
+async def cmd_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.effective_user:
+        return
+    if not is_admin_message(update.effective_user):
+        await update.message.reply_text("⛔ Только для админа.")
+        return
+    n = 25
+    if context.args:
+        try:
+            n = int(context.args[0])
+        except ValueError:
+            n = 25
+    rows = get_transactions(n)
+    if not rows:
+        await update.message.reply_text("Транзакций пока нет.")
+        return
+    lines = [f"📜 Транзакции (последние {len(rows)}):\n"]
+    for r in rows:
+        name = display_name(r["user_id"], r.get("username"), r.get("first_name"))
+        delta = int(r.get("delta") or 0)
+        sign = f"+{delta}" if delta >= 0 else str(delta)
+        why = reason_ru(r.get("reason") or "")
+        when = _fmt_ts(r.get("created_at") or 0)
+        lines.append(f"• {when} {name} {sign}⭐ ({why})")
+    text = "\n".join(lines)
+    if len(text) > 4000:
+        text = text[:3900] + "\n…"
+    await update.message.reply_text(text)
+
+
+async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.effective_user:
+        return
+    if not is_admin_message(update.effective_user):
+        await update.message.reply_text("⛔ Только для админа.")
+        return
+    s = get_stats()
+    await update.message.reply_text(
+        "📊 Сводка BANANAWOW\n\n"
+        f"Игроков: {s['users']}\n"
+        f"Ещё free: {s['free_left']}\n"
+        f"Уже сыграли free: {s['played_free']}\n"
+        f"Сумма балансов: {s['balance_sum']} ⭐\n"
+        f"Ставок (игр): {s['plays']}\n"
+        f"Сожжено ставками: {s['stakes_burned']} ⭐\n"
+        f"Пополнений (ledger): {s['topups']} ⭐\n"
+        f"Выплачено выигрышей: {s['wins_paid']} ⭐\n"
+        f"Версия: {APP_VERSION}"
     )
 
 
@@ -1338,6 +1677,13 @@ def main():
             app_bot.add_handler(CommandHandler("start", cmd_start))
             app_bot.add_handler(CommandHandler("play", cmd_play))
             app_bot.add_handler(CommandHandler("balance", cmd_balance))
+            # админ
+            app_bot.add_handler(CommandHandler("admin", cmd_admin))
+            app_bot.add_handler(CommandHandler("reset", cmd_reset))
+            app_bot.add_handler(CommandHandler("reset_confirm", cmd_reset_confirm))
+            app_bot.add_handler(CommandHandler("players", cmd_players))
+            app_bot.add_handler(CommandHandler(["tx", "transactions"], cmd_tx))
+            app_bot.add_handler(CommandHandler("stats", cmd_stats))
             app_bot.add_handler(PreCheckoutQueryHandler(pre_checkout))
             app_bot.add_handler(
                 MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment)

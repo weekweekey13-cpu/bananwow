@@ -1940,9 +1940,10 @@
           if (data.tgWithdrawMin) TG_WITHDRAW_MIN = data.tgWithdrawMin;
           if (typeof data.freePlayAvailable === "boolean") {
             freePlayAvailable = data.freePlayAvailable;
-          } else if (data.userId != null && data.balance === 0) {
-            // fallback: новый игрок без явного флага — пробуем free
-            freePlayAvailable = true;
+            try {
+              if (freePlayAvailable) localStorage.removeItem("bw_free_done");
+              else localStorage.setItem("bw_free_done", "1");
+            } catch (_) {}
           }
           if (Array.isArray(data.packages) && data.packages.length) {
             PACKAGES = data.packages;
