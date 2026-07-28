@@ -375,13 +375,13 @@ def get_stats() -> dict:
 def reason_ru(reason: str) -> str:
     r = (reason or "").lower()
     if r == "play":
-        return "ставка"
+        return "bet"
     if r == "win_claim":
-        return "выигрыш"
+        return "win"
     if r == "topup" or r.startswith("topup"):
-        return "пополнение"
+        return "topup"
     if r == "tg_withdraw":
-        return "вывод"
+        return "withdraw"
     return reason or "?"
 
 
@@ -801,9 +801,9 @@ class Handler(SimpleHTTPRequestHandler):
             "ping_url": "/api/ping",
             "setup_url": "/keepalive-setup",
             "hint": (
-                "Нет BOT_TOKEN в Environment — добавь в Render и Redeploy."
+                "BOT_TOKEN missing in Environment — add it in Render and Redeploy."
                 if not has_token
-                else "Keep-alive: UptimeRobot → /api/ping каждые 5 мин."
+                else "Keep-alive: UptimeRobot → /api/ping every 5 min."
             ),
         }
 
@@ -928,7 +928,7 @@ class Handler(SimpleHTTPRequestHandler):
                 {
                     "ok": False,
                     "error": "open_in_telegram",
-                    "message": "Откройте игру через Telegram-бота.",
+                    "message": "Open the game via the Telegram bot.",
                 },
             )
             return
@@ -974,7 +974,7 @@ class Handler(SimpleHTTPRequestHandler):
                 {
                     "ok": False,
                     "error": "open_in_telegram",
-                    "message": "Откройте игру заново через кнопку «Играть» в боте.",
+                    "message": "Reopen the game via the Play button in the bot.",
                 },
             )
             return
@@ -991,7 +991,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "balance": bal,
                     "gameCost": stake,
                     "stake": stake,
-                    "message": f"Недостаточно ⭐. Нужно {stake}, у вас {bal}.",
+                    "message": f"Not enough ⭐. Need {stake}, you have {bal}.",
                 },
             )
             return
@@ -1042,12 +1042,12 @@ class Handler(SimpleHTTPRequestHandler):
                 {
                     "ok": False,
                     "error": "open_in_telegram",
-                    "message": "Откройте игру через Telegram-бота.",
+                    "message": "Open the game via the Telegram bot.",
                 },
             )
             return
         if uid is None:
-            self._json(400, {"ok": False, "error": "no_user", "message": "Нет user id"})
+            self._json(400, {"ok": False, "error": "no_user", "message": "No user id"})
             return
 
         try:
@@ -1069,8 +1069,8 @@ class Handler(SimpleHTTPRequestHandler):
                     "tgWithdrawMin": TG_WITHDRAW_MIN,
                     "needMore": need,
                     "message": (
-                        f"Вывод в Telegram от {TG_WITHDRAW_MIN} ⭐. "
-                        f"У вас {bal_before} ⭐ — нужно ещё {need} ⭐."
+                        f"Telegram withdraw from {TG_WITHDRAW_MIN} ⭐. "
+                        f"You have {bal_before} ⭐ — need {need} more ⭐."
                     ),
                 },
             )
@@ -1091,7 +1091,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "balance": bal,
                     "tgWithdrawMin": TG_WITHDRAW_MIN,
                     "message": (
-                        f"Недостаточно ⭐. Нужно {TG_WITHDRAW_MIN}, у вас {bal}."
+                        f"Not enough ⭐. Need {TG_WITHDRAW_MIN}, you have {bal}."
                         if err == "insufficient"
                         else err
                     ),
@@ -1102,10 +1102,10 @@ class Handler(SimpleHTTPRequestHandler):
         notify_user(
             int(uid),
             (
-                f"✅ Вывод оформлен: {amount} ⭐\n"
-                f"Сумма списана с игрового баланса.\n"
-                f"Остаток в игре: {bal} ⭐\n\n"
-                f"Звёзды зачисляются на ваш баланс Telegram Stars."
+                f"✅ Withdrawal processed: {amount} ⭐\n"
+                f"Amount deducted from game balance.\n"
+                f"Game balance left: {bal} ⭐\n\n"
+                f"Stars are credited to your Telegram Stars balance."
             ),
         )
         log.info("tg_withdraw user=%s amount=%s bal=%s", uid, amount, bal)
@@ -1116,7 +1116,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "balance": bal,
                 "amount": amount,
                 "tgWithdrawMin": TG_WITHDRAW_MIN,
-                "message": f"Выведено {amount} ⭐ в Telegram",
+                "message": f"Withdrew {amount} ⭐ to Telegram",
             },
         )
 
@@ -1134,7 +1134,7 @@ class Handler(SimpleHTTPRequestHandler):
         if uid is None:
             self._json(
                 400,
-                {"ok": False, "error": "no_user", "message": "Нет user id"},
+                {"ok": False, "error": "no_user", "message": "No user id"},
             )
             return
 
@@ -1145,7 +1145,7 @@ class Handler(SimpleHTTPRequestHandler):
                 {
                     "ok": False,
                     "error": "open_in_telegram",
-                    "message": "Откройте игру через Telegram-бота.",
+                    "message": "Open the game via the Telegram bot.",
                 },
             )
             return
@@ -1165,12 +1165,12 @@ class Handler(SimpleHTTPRequestHandler):
                     "error": msg,
                     "balance": bal,
                     "message": {
-                        "already_claimed": "Приз уже выведен",
-                        "not_a_win": "В этой игре нет выигрыша",
-                        "session_not_found": "Сессия не найдена",
-                        "session_user_mismatch": "Чужая сессия",
-                        "no_session": "Нет sessionId",
-                        "no_prize": "Приз 0",
+                        "already_claimed": "Prize already claimed",
+                        "not_a_win": "This round was not a win",
+                        "session_not_found": "Session not found",
+                        "session_user_mismatch": "Session belongs to another user",
+                        "no_session": "No sessionId",
+                        "no_prize": "Prize is 0",
                     }.get(msg, msg),
                 },
             )
@@ -1203,7 +1203,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "ok": True,
                 "balance": bal,
                 "prize": prize_amt,
-                "message": f"+{prize_amt} ⭐ на баланс",
+                "message": f"+{prize_amt} ⭐ to balance",
             },
         )
 
@@ -1235,7 +1235,7 @@ class Handler(SimpleHTTPRequestHandler):
                     {
                         "ok": False,
                         "error": "bad_package",
-                        "message": f"Выберите пакет: {', '.join(map(str, TOPUP_PACKAGES))}",
+                        "message": f"Choose a pack: {', '.join(map(str, TOPUP_PACKAGES))}",
                         "packages": list(TOPUP_PACKAGES),
                     },
                 )
@@ -1249,10 +1249,10 @@ class Handler(SimpleHTTPRequestHandler):
             result = api_call(
                 "createInvoiceLink",
                 {
-                    "title": f"+{amount} ⭐ на баланс",
+                    "title": f"+{amount} ⭐ to balance",
                     "description": (
-                        f"Пополнение BANANAWOW: +{amount} ⭐. "
-                        f"Одна игра — {GAME_COST} ⭐ (~{games} игр)."
+                        f"BANANAWOW top-up: +{amount} ⭐. "
+                        f"One game — {GAME_COST} ⭐ (~{games} games)."
                     ),
                     "payload": payload,
                     "provider_token": "",
@@ -1322,19 +1322,19 @@ def _webapp_url() -> str:
 
 def play_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        [[KeyboardButton(text="🎮 Играть", web_app=WebAppInfo(url=_webapp_url()))]],
+        [[KeyboardButton(text="🎮 Play", web_app=WebAppInfo(url=_webapp_url()))]],
         resize_keyboard=True,
     )
 
 
 # Тексты кнопок админ-клавиатуры (только для ADMIN_USERNAMES)
-BTN_PLAY = "🎮 Играть"
-BTN_PLAYERS = "👥 Игроки"
-BTN_TX = "📜 Транзакции"
-BTN_STATS = "📊 Сводка"
-BTN_RESET = "♻️ Сброс"
-BTN_RESET_OK = "✅ Подтвердить сброс"
-BTN_ADMIN = "👑 Меню"
+BTN_PLAY = "🎮 Play"
+BTN_PLAYERS = "👥 Players"
+BTN_TX = "📜 Transactions"
+BTN_STATS = "📊 Stats"
+BTN_RESET = "♻️ Reset"
+BTN_RESET_OK = "✅ Confirm reset"
+BTN_ADMIN = "👑 Menu"
 
 
 def admin_keyboard() -> ReplyKeyboardMarkup:
@@ -1395,20 +1395,20 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     free = is_first_play_available(user.id) if user else False
     if uname in ADMIN_USERNAMES:
         text = (
-            "👑 Админ-режим\n\n"
-            "Кнопки внизу — управление без команд.\n"
-            "Найди 3 одинаковых · ставка ×10\n"
-            "Или жми «Играть» 👇"
+            "👑 Admin mode\n\n"
+            "Use the buttons below to manage the bot.\n"
+            "Find 3 identical · bet ×10\n"
+            "Or tap Play 👇"
         )
     else:
-        free_line = "🎁 Первая игра бесплатно!\n" if free else ""
+        free_line = "🎁 First game is free!\n" if free else ""
         text = (
             "🎰 BANANAWOW\n\n"
             f"{free_line}"
-            "Найди 3 одинаковых фрукта за 3 хода.\n"
-            f"Ставка {STAKE_MIN}–{STAKE_MAX} ⭐ · выигрыш ×{WIN_MULTIPLIER}\n"
-            f"Баланс: {bal} ⭐\n\n"
-            "Жми «Играть» 👇"
+            "Find 3 identical fruits in 3 moves.\n"
+            f"Bet {STAKE_MIN}–{STAKE_MAX} ⭐ · win ×{WIN_MULTIPLIER}\n"
+            f"Balance: {bal} ⭐\n\n"
+            "Tap Play 👇"
         )
     await update.message.reply_text(text, reply_markup=keyboard_for(user))
 
@@ -1421,7 +1421,7 @@ async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ensure_user(user.id, user.username, user.first_name)
     bal = get_balance(user.id) if user else 0
     await update.message.reply_text(
-        f"Баланс: {bal} ⭐ · ставка {STAKE_MIN}–{STAKE_MAX} ⭐",
+        f"Balance: {bal} ⭐ · bet {STAKE_MIN}–{STAKE_MAX} ⭐",
         reply_markup=keyboard_for(user),
     )
 
@@ -1433,12 +1433,12 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ensure_user(u.id, u.username, u.first_name)
     bal = get_balance(u.id)
     free = is_first_play_available(u.id)
-    free_txt = "да 🎁" if free else "нет"
+    free_txt = "yes 🎁" if free else "no"
     await update.message.reply_text(
-        f"⭐ Баланс: {bal}\n"
-        f"Бесплатная игра: {free_txt}\n"
-        f"Ставка {STAKE_MIN}–{STAKE_MAX} ⭐ · приз ×{WIN_MULTIPLIER}\n\n"
-        "Пополнить можно в мини-приложении.",
+        f"⭐ Balance: {bal}\n"
+        f"Free game: {free_txt}\n"
+        f"Bet {STAKE_MIN}–{STAKE_MAX} ⭐ · prize ×{WIN_MULTIPLIER}\n\n"
+        "Top up inside the mini app.",
         reply_markup=keyboard_for(u),
     )
 
@@ -1447,18 +1447,18 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_user:
         return
     if not is_admin_message(update.effective_user):
-        await update.message.reply_text("⛔ Только для админа.")
+        await update.message.reply_text("⛔ Admin only.")
         return
     await update.message.reply_text(
-        "👑 Админ-панель BANANAWOW\n\n"
-        "Кнопки внизу:\n"
-        f"• {BTN_PLAYERS} — кто играл\n"
-        f"• {BTN_TX} — транзакции\n"
-        f"• {BTN_STATS} — сводка\n"
-        f"• {BTN_RESET} → потом {BTN_RESET_OK}\n"
-        f"• {BTN_PLAY} — открыть игру\n\n"
-        "Команды тоже работают: /players /tx /stats /reset\n\n"
-        "Админы: " + ", ".join("@" + a for a in sorted(ADMIN_USERNAMES)),
+        "👑 Admin panel BANANAWOW\n\n"
+        "Buttons below:\n"
+        f"• {BTN_PLAYERS} — who played\n"
+        f"• {BTN_TX} — transactions\n"
+        f"• {BTN_STATS} — summary\n"
+        f"• {BTN_RESET} → then {BTN_RESET_OK}\n"
+        f"• {BTN_PLAY} — open game\n\n"
+        "Commands also work: /players /tx /stats /reset\n\n"
+        "Admins: " + ", ".join("@" + a for a in sorted(ADMIN_USERNAMES)),
         reply_markup=admin_keyboard(),
     )
 
@@ -1490,16 +1490,16 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_user:
         return
     if not is_admin_message(update.effective_user):
-        await update.message.reply_text("⛔ Только для админа.")
+        await update.message.reply_text("⛔ Admin only.")
         return
     await update.message.reply_text(
-        "⚠️ Это обнулит ВСЕХ игроков:\n"
-        "• балансы\n"
-        "• free-игры (снова всем можно 1 раз бесплатно)\n"
-        "• сессии и историю транзакций\n"
-        "• заявки на вывод\n\n"
-        f"Чтобы подтвердить, нажми:\n«{BTN_RESET_OK}»\n"
-        "или /reset_confirm",
+        "⚠️ This will reset ALL players:\n"
+        "• balances\n"
+        "• free games (everyone can play free once again)\n"
+        "• sessions and transaction history\n"
+        "• withdraw requests\n\n"
+        f"To confirm, tap:\n«{BTN_RESET_OK}»\n"
+        "or /reset_confirm",
         reply_markup=admin_keyboard(),
     )
 
@@ -1508,7 +1508,7 @@ async def cmd_reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_user:
         return
     if not is_admin_message(update.effective_user):
-        await update.message.reply_text("⛔ Только для админа.")
+        await update.message.reply_text("⛔ Admin only.")
         return
     counts = reset_all_game_data()
     log.warning(
@@ -1518,11 +1518,11 @@ async def cmd_reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     lines = [f"• {k}: {v}" for k, v in counts.items()]
     await update.message.reply_text(
-        "✅ Сброс выполнен.\n"
-        "Все как будто никогда не заходили — free-игра снова у каждого.\n\n"
-        "Удалено:\n" + "\n".join(lines) + "\n\n"
-        "⚠️ У игроков в телефоне может остаться кэш кнопки — "
-        "пусть закроют мини-приложение и откроют снова.",
+        "✅ Reset complete.\n"
+        "Everyone is treated as a new player — free game is available again.\n\n"
+        "Removed:\n" + "\n".join(lines) + "\n\n"
+        "⚠️ Players may still have cached UI — "
+        "ask them to close and reopen the mini app.",
         reply_markup=admin_keyboard(),
     )
 
@@ -1531,15 +1531,15 @@ async def cmd_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_user:
         return
     if not is_admin_message(update.effective_user):
-        await update.message.reply_text("⛔ Только для админа.")
+        await update.message.reply_text("⛔ Admin only.")
         return
     rows = get_players(60)
     if not rows:
         await update.message.reply_text(
-            "Пока никого нет.", reply_markup=admin_keyboard()
+            "No players yet.", reply_markup=admin_keyboard()
         )
         return
-    lines = [f"👥 Игроки ({len(rows)}):\n"]
+    lines = [f"👥 Players ({len(rows)}):\n"]
     for r in rows:
         name = display_name(r["user_id"], r.get("username"), r.get("first_name"))
         free = "free✓" if int(r.get("first_play_done") or 0) == 0 else "free✗"
@@ -1557,7 +1557,7 @@ async def cmd_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_user:
         return
     if not is_admin_message(update.effective_user):
-        await update.message.reply_text("⛔ Только для админа.")
+        await update.message.reply_text("⛔ Admin only.")
         return
     n = 25
     if context.args:
@@ -1568,10 +1568,10 @@ async def cmd_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rows = get_transactions(n)
     if not rows:
         await update.message.reply_text(
-            "Транзакций пока нет.", reply_markup=admin_keyboard()
+            "No transactions yet.", reply_markup=admin_keyboard()
         )
         return
-    lines = [f"📜 Транзакции (последние {len(rows)}):\n"]
+    lines = [f"📜 Transactions (last {len(rows)}):\n"]
     for r in rows:
         name = display_name(r["user_id"], r.get("username"), r.get("first_name"))
         delta = int(r.get("delta") or 0)
@@ -1589,20 +1589,20 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.effective_user:
         return
     if not is_admin_message(update.effective_user):
-        await update.message.reply_text("⛔ Только для админа.")
+        await update.message.reply_text("⛔ Admin only.")
         return
     s = get_stats()
     await update.message.reply_text(
-        "📊 Сводка BANANAWOW\n\n"
-        f"Игроков: {s['users']}\n"
-        f"Ещё free: {s['free_left']}\n"
-        f"Уже сыграли free: {s['played_free']}\n"
-        f"Сумма балансов: {s['balance_sum']} ⭐\n"
-        f"Ставок (игр): {s['plays']}\n"
-        f"Сожжено ставками: {s['stakes_burned']} ⭐\n"
-        f"Пополнений (ledger): {s['topups']} ⭐\n"
-        f"Выплачено выигрышей: {s['wins_paid']} ⭐\n"
-        f"Версия: {APP_VERSION}",
+        "📊 BANANAWOW stats\n\n"
+        f"Players: {s['users']}\n"
+        f"Free left: {s['free_left']}\n"
+        f"Used free: {s['played_free']}\n"
+        f"Total balances: {s['balance_sum']} ⭐\n"
+        f"Bets (games): {s['plays']}\n"
+        f"Burned in bets: {s['stakes_burned']} ⭐\n"
+        f"Top-ups (ledger): {s['topups']} ⭐\n"
+        f"Wins paid: {s['wins_paid']} ⭐\n"
+        f"Version: {APP_VERSION}",
         reply_markup=admin_keyboard(),
     )
 
@@ -1616,7 +1616,7 @@ async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if payload.startswith("topup_") or payload.startswith("play_"):
         await query.answer(ok=True)
     else:
-        await query.answer(ok=False, error_message="Неизвестный платёж")
+        await query.answer(ok=False, error_message="Unknown payment")
 
 
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1667,14 +1667,14 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if credited > 0:
         await update.message.reply_text(
-            f"✅ +{credited} ⭐ на баланс!\n"
-            f"Сейчас: {new_bal} ⭐\n\n"
-            f"Одна игра — {GAME_COST} ⭐. Открой мини-приложение и играй 👇",
+            f"✅ +{credited} ⭐ added to balance!\n"
+            f"Now: {new_bal} ⭐\n\n"
+            f"One game — {GAME_COST} ⭐. Open the mini app and play 👇",
             reply_markup=play_keyboard(),
         )
     else:
         await update.message.reply_text(
-            "✅ Оплата прошла! Открой мини-приложение.",
+            "✅ Payment successful! Open the mini app.",
             reply_markup=play_keyboard(),
         )
 
@@ -1686,7 +1686,7 @@ def set_menu_button(url: str):
             {
                 "menu_button": {
                     "type": "web_app",
-                    "text": "Играть",
+                    "text": "Play",
                     "web_app": {"url": url},
                 }
             },

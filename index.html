@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>BANANAWOW — найди 3 фрукта</title>
+  <title>BANANAWOW — find 3 fruits</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     :root {
@@ -790,40 +790,40 @@
 </head>
 <body>
   <!-- Стартовый экран -->
-  <div class="splash" id="splash" role="dialog" aria-modal="true" aria-label="Добро пожаловать">
+  <div class="splash" id="splash" role="dialog" aria-modal="true" aria-label="Welcome">
     <div class="splash-card">
       <div class="brand">BANANAWOW</div>
-      <h1>Найди 3 одинаковых</h1>
-      <p class="subtitle">3 хода · выигрыш <strong>×10</strong></p>
-      <button type="button" class="btn btn-pulse" id="splashStartBtn">Старт</button>
+      <h1>Find 3 identical</h1>
+      <p class="subtitle">3 moves · win <strong>×10</strong></p>
+      <button type="button" class="btn btn-pulse" id="splashStartBtn">Start</button>
     </div>
   </div>
 
   <div class="wrap">
     <div class="chips">
-      <div class="chip" id="attemptsChip">Ходы: <strong id="attempts">3</strong></div>
-      <div class="chip" id="costChip">Ставка: <strong id="costLabel">10 ⭐</strong></div>
-      <div class="chip" id="prizeChip">Приз: <strong id="prizeLabel">100 ⭐</strong></div>
+      <div class="chip" id="attemptsChip">Moves: <strong id="attempts">3</strong></div>
+      <div class="chip" id="costChip">Bet: <strong id="costLabel">10 ⭐</strong></div>
+      <div class="chip" id="prizeChip">Prize: <strong id="prizeLabel">100 ⭐</strong></div>
     </div>
 
     <div class="board-shell">
-      <div class="board locked preview" id="board" aria-label="Игровое поле"></div>
+      <div class="board locked preview" id="board" aria-label="Game board"></div>
     </div>
 
     <div class="stake-box" id="stakeBox">
       <div class="stake-head">
-        <span>Ставка</span>
+        <span>Bet</span>
         <strong id="stakeValueLabel">10 ⭐</strong>
       </div>
       <input type="range" id="stakeRange" class="stake-range" min="10" max="200" step="10" value="10" />
       <div class="stake-presets" id="stakePresets"></div>
-      <p class="stake-hint">Выигрыш = ставка × <strong>10</strong></p>
+      <p class="stake-hint">Win = bet × <strong>10</strong></p>
     </div>
 
     <div class="play-area" id="playArea">
-      <button type="button" class="btn btn-pulse" id="playBtn">Играть · 10 ⭐</button>
-      <p class="free-badge" id="freeBadge">🎁 Первая игра бесплатно · выигрыш 9 ⭐</p>
-      <p class="hint-line" id="hintLine">Пополни баланс и начинай</p>
+      <button type="button" class="btn btn-pulse" id="playBtn">Play · 10 ⭐</button>
+      <p class="free-badge" id="freeBadge">🎁 First game free · win 9 ⭐</p>
+      <p class="hint-line" id="hintLine">Top up your balance and start</p>
     </div>
   </div>
 
@@ -831,18 +831,18 @@
   <div class="bottom-bar" id="bottomBar">
     <div class="bottom-inner">
       <div class="balance-block">
-        <span class="balance-label">Баланс</span>
+        <span class="balance-label">Balance</span>
         <div class="balance-value" id="balanceValue">
           <span class="star">⭐</span>
           <span id="balanceNum">…</span>
         </div>
       </div>
       <div class="bar-actions">
-        <button type="button" class="withdraw-btn" id="tgWithdrawBtn" disabled title="От 110 ⭐">
-          Вывести
+        <button type="button" class="withdraw-btn" id="tgWithdrawBtn" disabled title="From 110 ⭐">
+          Withdraw
         </button>
         <button type="button" class="topup-btn" id="topupBtn">
-          <span>+</span> Пополнить
+          <span>+</span> Top up
         </button>
       </div>
     </div>
@@ -852,10 +852,10 @@
   <div class="overlay" id="topupOverlay" role="dialog" aria-modal="true">
     <div class="sheet">
       <div class="sheet-handle"></div>
-      <h2>Пополнить ⭐</h2>
-      <p class="lead">Выбери пакет. Звёзды сразу на баланс — играй когда удобно.</p>
+      <h2>Top up ⭐</h2>
+      <p class="lead">Pick a pack. Stars go to your balance instantly.</p>
       <div class="packages" id="packages"></div>
-      <button type="button" class="btn btn-ghost" id="topupClose">Закрыть</button>
+      <button type="button" class="btn btn-ghost" id="topupClose">Close</button>
       <p class="err" id="topupErr"></p>
     </div>
   </div>
@@ -864,11 +864,11 @@
   <div class="overlay center" id="loseOverlay" role="dialog" aria-modal="true">
     <div class="sheet">
       <div class="lose-emoji">🙈</div>
-      <h2>Почти!</h2>
-      <p class="lead" id="loseLead">Третья одинаковая была вот там. Попробуй ещё — удача любит смелых!</p>
-      <div class="pill-row"><span class="cost-pill" id="loseCostPill">⭐ 10 за игру</span></div>
-      <button type="button" class="btn" id="retryBtn">Сыграть ещё · 10 ⭐</button>
-      <button type="button" class="btn btn-ghost" id="loseClose" style="margin-top:8px">На главный</button>
+      <h2>So close!</h2>
+      <p class="lead" id="loseLead">The third match was right there. Try again — luck favors the bold!</p>
+      <div class="pill-row"><span class="cost-pill" id="loseCostPill">⭐ 10 per game</span></div>
+      <button type="button" class="btn" id="retryBtn">Play again · 10 ⭐</button>
+      <button type="button" class="btn btn-ghost" id="loseClose" style="margin-top:8px">Home</button>
       <p class="err" id="retryErr"></p>
     </div>
   </div>
@@ -877,14 +877,14 @@
   <div class="overlay center" id="winOverlay" role="dialog" aria-modal="true">
     <div class="sheet">
       <div class="lose-emoji">🎉</div>
-      <h2>Победа!</h2>
-      <p class="lead" id="winLead">Три одинаковых! Забери приз на баланс.</p>
+      <h2>You won!</h2>
+      <p class="lead" id="winLead">Three of a kind! Claim your prize to balance.</p>
       <div class="pill-row"><span class="cost-pill" id="winPrizePill">⭐ +100</span></div>
-      <button type="button" class="btn btn-pulse" id="claimBtn">На баланс · 100 ⭐</button>
+      <button type="button" class="btn btn-pulse" id="claimBtn">To balance · 100 ⭐</button>
       <div id="winAfterClaim" class="hidden" style="margin-top:10px;width:100%">
-        <p class="hint-line ok" id="claimOk" style="margin-bottom:10px">Приз на балансе!</p>
-        <button type="button" class="btn" id="winRetryBtn">Сыграть ещё · 10 ⭐</button>
-        <button type="button" class="btn btn-ghost" id="winClose" style="margin-top:8px">На главный</button>
+        <p class="hint-line ok" id="claimOk" style="margin-bottom:10px">Prize added!</p>
+        <button type="button" class="btn" id="winRetryBtn">Play again · 10 ⭐</button>
+        <button type="button" class="btn btn-ghost" id="winClose" style="margin-top:8px">Home</button>
       </div>
       <p class="err" id="claimErr"></p>
     </div>
@@ -894,14 +894,14 @@
   <div class="overlay" id="tgWithdrawOverlay" role="dialog" aria-modal="true">
     <div class="sheet">
       <div class="sheet-handle"></div>
-      <h2>Вывод в Telegram</h2>
+      <h2>Withdraw to Telegram</h2>
       <p class="lead" id="tgWithdrawLead">
-        Вывести звёзды с игрового баланса на баланс Telegram Stars.
-        Минимум — <strong>110 ⭐</strong>.
+        Move stars from your game balance to Telegram Stars.
+        Minimum — <strong>110 ⭐</strong>.
       </p>
       <div class="pill-row"><span class="cost-pill" id="tgWithdrawPill">⭐ 110</span></div>
-      <button type="button" class="btn" id="tgWithdrawConfirm">Вывести 110 ⭐</button>
-      <button type="button" class="btn btn-ghost" id="tgWithdrawClose" style="margin-top:8px">Закрыть</button>
+      <button type="button" class="btn" id="tgWithdrawConfirm">Withdraw 110 ⭐</button>
+      <button type="button" class="btn btn-ghost" id="tgWithdrawClose" style="margin-top:8px">Close</button>
       <p class="err" id="tgWithdrawErr"></p>
     </div>
   </div>
@@ -913,11 +913,11 @@
       const iconUrl = (name) => ICON_BASE + name + "?v=" + ICON_V;
       const CARD_BACK = iconUrl("card_back.png");
       const FRUITS = [
-        { id: "banana", icon: iconUrl("banana.png"), label: "Банан" },
-        { id: "strawberry", icon: iconUrl("strawberry.png"), label: "Клубника" },
-        { id: "cherry", icon: iconUrl("cherry.png"), label: "Вишня" },
-        { id: "lemon", icon: iconUrl("lemon.png"), label: "Лимон" },
-        { id: "grape", icon: iconUrl("grape.png"), label: "Виноград" },
+        { id: "banana", icon: iconUrl("banana.png"), label: "Banana" },
+        { id: "strawberry", icon: iconUrl("strawberry.png"), label: "Strawberry" },
+        { id: "cherry", icon: iconUrl("cherry.png"), label: "Cherry" },
+        { id: "lemon", icon: iconUrl("lemon.png"), label: "Lemon" },
+        { id: "grape", icon: iconUrl("grape.png"), label: "Grape" },
       ];
 
       [CARD_BACK].concat(FRUITS.map((f) => f.icon)).forEach((src) => {
@@ -1108,10 +1108,10 @@
 
       /** Текст главной кнопки по правилам: free → баланс → пополнить */
       function playButtonLabel() {
-        if (freePlayAvailable) return "Сыграть бесплатно";
-        if (isAdmin) return "Играть";
-        if (balance >= currentStake && balance > 0) return "Играть";
-        return "Пополнить и играть";
+        if (freePlayAvailable) return "Play free";
+        if (isAdmin) return "Play";
+        if (balance >= currentStake && balance > 0) return "Play";
+        return "Top up & play";
       }
 
       function setStake(n, fromUi) {
@@ -1149,16 +1149,16 @@
       function refreshPlayUi() {
         const stakeTxt = currentStake + " ⭐";
         costLabel.textContent = isAdmin
-          ? "бесплатно"
+          ? "free"
           : freePlayAvailable
             ? "free"
             : stakeTxt;
         if (prizeLabel) prizeLabel.textContent = previewPrize() + " ⭐";
         loseCostPill.textContent = isAdmin
-          ? "👑 бесплатно"
+          ? "👑 free"
           : freePlayAvailable
             ? "🎁 free · 9 ⭐"
-            : "⭐ ставка " + currentStake;
+            : "⭐ bet " + currentStake;
 
         if (stakeBox) {
           stakeBox.classList.toggle("disabled", !!freePlayAvailable || !!inRound);
@@ -1167,17 +1167,17 @@
         // Кнопка вывода
         const canTg = balance >= TG_WITHDRAW_MIN;
         tgWithdrawBtn.disabled = !canTg;
-        tgWithdrawBtn.textContent = "Вывести";
+        tgWithdrawBtn.textContent = "Withdraw";
         tgWithdrawBtn.title = canTg
-          ? "Вывести " + TG_WITHDRAW_MIN + " ⭐"
-          : "Нужно " + TG_WITHDRAW_MIN + " ⭐ (у вас " + balance + ")";
+          ? "Withdraw " + TG_WITHDRAW_MIN + " ⭐"
+          : "Need " + TG_WITHDRAW_MIN + " ⭐ (you have " + balance + ")";
         tgWithdrawPill.textContent = "⭐ " + TG_WITHDRAW_MIN;
         if (winRetryBtn) {
           winRetryBtn.textContent = freePlayAvailable
-            ? "Сыграть ещё бесплатно"
+            ? "Play free again"
             : isAdmin
-              ? "Сыграть ещё (free)"
-              : "Сыграть ещё · " + currentStake + " ⭐";
+              ? "Play again (free)"
+              : "Play again · " + currentStake + " ⭐";
         }
 
         if (inRound) {
@@ -1195,36 +1195,36 @@
         if (freePlayAvailable) {
           freeBadge.classList.add("show");
           freeBadge.textContent =
-            "🎁 Первая игра бесплатно · выигрыш " + FREE_FIRST_PRIZE + " ⭐";
-          playBtn.textContent = "Сыграть бесплатно";
+            "🎁 First game free · win " + FREE_FIRST_PRIZE + " ⭐";
+          playBtn.textContent = "Play free";
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.remove("attention");
           hintLine.textContent =
-            "Первая игра бесплатно · приз " + FREE_FIRST_PRIZE + " ⭐";
+            "First game free · prize " + FREE_FIRST_PRIZE + " ⭐";
           hintLine.className = "hint-line ok";
-          retryBtn.textContent = "Сыграть бесплатно";
-          if (winRetryBtn) winRetryBtn.textContent = "Сыграть бесплатно";
+          retryBtn.textContent = "Play free";
+          if (winRetryBtn) winRetryBtn.textContent = "Play free";
           return;
         }
 
         freeBadge.classList.remove("show");
 
         if (isAdmin) {
-          playBtn.textContent = "Играть";
+          playBtn.textContent = "Play";
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.remove("attention");
           hintLine.textContent =
-            "Админ · ставка " + currentStake + " · приз ×" + WIN_MULTIPLIER;
+            "Admin · bet " + currentStake + " · prize ×" + WIN_MULTIPLIER;
           hintLine.className = "hint-line ok";
-          retryBtn.textContent = "Играть";
+          retryBtn.textContent = "Play";
           return;
         }
 
         retryBtn.textContent =
-          balance >= currentStake ? "Играть" : "Пополнить и играть";
+          balance >= currentStake ? "Play" : "Top up & play";
         if (winRetryBtn) {
           winRetryBtn.textContent =
-            balance >= currentStake ? "Играть" : "Пополнить и играть";
+            balance >= currentStake ? "Play" : "Top up & play";
         }
 
         playBtn.textContent = playButtonLabel();
@@ -1233,9 +1233,9 @@
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.remove("attention");
           hintLine.textContent =
-            "Ставка " +
+            "Bet " +
             currentStake +
-            " · выигрыш ×" +
+            " · win ×" +
             WIN_MULTIPLIER +
             " = " +
             previewPrize() +
@@ -1245,10 +1245,10 @@
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.add("attention");
           if (balance === 0) {
-            hintLine.textContent = "Пополни баланс, чтобы играть";
+            hintLine.textContent = "Top up to play";
           } else {
             hintLine.textContent =
-              "Нужно ещё " + (currentStake - balance) + " ⭐ на ставку";
+              "Need " + (currentStake - balance) + " more ⭐ for bet";
           }
           hintLine.className = "hint-line warn";
         }
@@ -1263,7 +1263,7 @@
           btn.type = "button";
           btn.className = "pkg" + (amt === hot ? " hot" : "");
           btn.innerHTML =
-            (amt === hot ? '<span class="badge">Хит</span>' : "") +
+            (amt === hot ? '<span class="badge">Hot</span>' : "") +
             '<span class="amt">⭐ ' + amt + "</span>" +
             '<span class="sub">~' + games + gameWord(games) + "</span>";
           btn.addEventListener("click", () => buyPackage(amt, btn));
@@ -1274,9 +1274,9 @@
       function gameWord(n) {
         const m10 = n % 10;
         const m100 = n % 100;
-        if (m10 === 1 && m100 !== 11) return " игра";
-        if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return " игры";
-        return " игр";
+        if (m10 === 1 && m100 !== 11) return " game";
+        if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return " games";
+        return " games";
       }
 
       function openTopup() {
@@ -1364,7 +1364,7 @@
           btn.type = "button";
           btn.className = "card";
           btn.dataset.index = String(index);
-          btn.setAttribute("aria-label", "Закрытая карта");
+          btn.setAttribute("aria-label", "Closed card");
           const inner = document.createElement("span");
           inner.className = "card-inner";
 
@@ -1433,16 +1433,16 @@
           if (claimBtn) {
             claimBtn.classList.remove("hidden");
             claimBtn.disabled = false;
-            claimBtn.textContent = "На баланс · " + WIN_PRIZE + " ⭐";
+            claimBtn.textContent = "To balance · " + WIN_PRIZE + " ⭐";
           }
           if (winAfterClaim) winAfterClaim.classList.add("hidden");
           if (claimErr) claimErr.textContent = "";
           if (winPrizePill) winPrizePill.textContent = "⭐ +" + WIN_PRIZE;
           if (winLead) {
             winLead.textContent =
-              "Три одинаковых! Забери " +
+              "Three of a kind! Claim " +
               WIN_PRIZE +
-              " ⭐ на баланс" +
+              " ⭐ to balance" +
               (WIN_PRIZE === FREE_FIRST_PRIZE
                 ? "."
                 : " (×" + WIN_MULTIPLIER + ").");
@@ -1463,7 +1463,7 @@
           console.error("startRound", e);
           inRound = false;
           locked = true;
-          showPlayError("Ошибка старта раунда. Попробуй ещё раз.");
+          showPlayError("Failed to start round. Try again.");
         }
       }
 
@@ -1596,7 +1596,7 @@
               missBtn.disabled = true;
               missBtn.setAttribute(
                 "aria-label",
-                (matchFruit && matchFruit.label) || "Найдена"
+                (matchFruit && matchFruit.label) || "Found"
               );
             }
           }
@@ -1604,9 +1604,9 @@
           const lead = document.getElementById("loseLead");
           if (lead && matchFruit) {
             lead.textContent =
-              "Третья «" +
+              "The third \"" +
               matchFruit.label +
-              "» была вот там 👆 Попробуй ещё!";
+              "\" was right there 👆 Try again!";
           }
 
           // Дать рассмотреть подсветку, потом открыть остальные и модалку
@@ -1657,10 +1657,10 @@
 
         if (winLead && matchFruit) {
           winLead.textContent =
-            "Три «" + matchFruit.label + "»! Выведи " + WIN_PRIZE + " ⭐ на баланс.";
+            "Three \"" + matchFruit.label + "\"s! Claim " + WIN_PRIZE + " ⭐ to balance.";
         }
         winPrizePill.textContent = "⭐ +" + WIN_PRIZE;
-        claimBtn.textContent = "На баланс · " + WIN_PRIZE + " ⭐";
+        claimBtn.textContent = "To balance · " + WIN_PRIZE + " ⭐";
         claimBtn.classList.remove("hidden");
         claimBtn.disabled = false;
         winAfterClaim.classList.add("hidden");
@@ -1708,7 +1708,7 @@
 
           if (!sessionId) {
             // Админ / сбой сессии — начислим только если есть session
-            claimErr.textContent = "Сессия игры не найдена. Сыграй ещё раз.";
+            claimErr.textContent = "Game session not found. Play again.";
             claimBtn.disabled = false;
             return;
           }
@@ -1730,14 +1730,14 @@
             prizeClaimed = true;
             if (typeof data.balance === "number") setBalance(data.balance, true);
             onClaimSuccess(data.balance);
-            claimOk.textContent = "Приз уже был выведен";
+            claimOk.textContent = "Prize already claimed";
             return;
           }
 
-          throw new Error(data.message || data.error || "Не удалось вывести");
+          throw new Error(data.message || data.error || "Withdraw failed");
         } catch (e) {
           console.error(e);
-          claimErr.textContent = e.message || "Ошибка вывода";
+          claimErr.textContent = e.message || "Withdraw error";
           claimBtn.disabled = false;
         } finally {
           loading = false;
@@ -1748,10 +1748,10 @@
         claimBtn.classList.add("hidden");
         winAfterClaim.classList.remove("hidden");
         claimOk.textContent =
-          "+" + WIN_PRIZE + " ⭐ на игровом балансе" +
-          (typeof bal === "number" ? " · всего " + bal : "") +
+          "+" + WIN_PRIZE + " ⭐ on game balance" +
+          (typeof bal === "number" ? " · total " + bal : "") +
           " 🎉";
-        hintLine.textContent = "Приз на игровом балансе";
+        hintLine.textContent = "Prize on game balance";
         hintLine.className = "hint-line ok";
         refreshPlayUi();
         try {
@@ -1764,21 +1764,21 @@
         if (balance < TG_WITHDRAW_MIN) {
           const need = TG_WITHDRAW_MIN - balance;
           tgWithdrawLead.innerHTML =
-            "Вывод в Telegram от <strong>" +
+            "Telegram withdraw from <strong>" +
             TG_WITHDRAW_MIN +
-            " ⭐</strong>.<br>У вас <strong>" +
+            " ⭐</strong>.<br>You have <strong>" +
             balance +
-            " ⭐</strong> — нужно ещё <strong>" +
+            " ⭐</strong> — need <strong>" +
             need +
-            " ⭐</strong>. Пополни баланс.";
-          tgWithdrawConfirm.textContent = "Пополнить";
+            " ⭐</strong> more. Top up.";
+          tgWithdrawConfirm.textContent = "Top up";
           tgWithdrawConfirm.dataset.mode = "topup";
         } else {
           tgWithdrawLead.innerHTML =
-            "Списать <strong>" +
+            "Deduct <strong>" +
             TG_WITHDRAW_MIN +
-            " ⭐</strong> с игрового баланса и отправить на баланс Telegram Stars.";
-          tgWithdrawConfirm.textContent = "Вывести " + TG_WITHDRAW_MIN + " ⭐";
+            " ⭐</strong> from game balance to Telegram Stars.";
+          tgWithdrawConfirm.textContent = "Withdraw " + TG_WITHDRAW_MIN + " ⭐";
           tgWithdrawConfirm.dataset.mode = "withdraw";
         }
         tgWithdrawPill.textContent = "⭐ " + TG_WITHDRAW_MIN;
@@ -1799,7 +1799,7 @@
         if (loading) return;
         if (balance < TG_WITHDRAW_MIN) {
           tgWithdrawErr.textContent =
-            "Нужно " + TG_WITHDRAW_MIN + " ⭐ (у вас " + balance + ")";
+            "Need " + TG_WITHDRAW_MIN + " ⭐ (you have " + balance + ")";
           return;
         }
         loading = true;
@@ -1810,7 +1810,7 @@
             tgWithdrawErr.textContent = "";
             closeTgWithdraw();
             hintLine.textContent =
-              "Демо: −" + TG_WITHDRAW_MIN + " ⭐ (вывод в TG)";
+              "Demo: −" + TG_WITHDRAW_MIN + " ⭐ (TG withdraw)";
             hintLine.className = "hint-line ok";
             return;
           }
@@ -1823,7 +1823,7 @@
             else setBalance(balance - TG_WITHDRAW_MIN, true);
             closeTgWithdraw();
             hintLine.textContent =
-              data.message || "Выведено " + TG_WITHDRAW_MIN + " ⭐ в Telegram";
+              data.message || "Withdrew " + TG_WITHDRAW_MIN + " ⭐ to Telegram";
             hintLine.className = "hint-line ok";
             try {
               if (tg && tg.HapticFeedback) {
@@ -1835,13 +1835,13 @@
           if (data.error === "min_balance" || res.status === 402) {
             if (typeof data.balance === "number") setBalance(data.balance, false);
             tgWithdrawErr.textContent =
-              data.message || "Недостаточно для вывода";
+              data.message || "Not enough to withdraw";
             return;
           }
-          throw new Error(data.message || data.error || "Ошибка вывода");
+          throw new Error(data.message || data.error || "Withdraw error");
         } catch (e) {
           console.error(e);
-          tgWithdrawErr.textContent = e.message || "Ошибка";
+          tgWithdrawErr.textContent = e.message || "Error";
         } finally {
           loading = false;
           tgWithdrawConfirm.disabled = false;
@@ -1871,12 +1871,12 @@
           try {
             data = await res.json();
           } catch (_) {
-            throw new Error("Сервер не ответил (код " + res.status + ")");
+            throw new Error("Server did not respond (code " + res.status + ")");
           }
           return { res, data };
         } catch (e) {
           if (e && (e.name === "AbortError" || e.message === "The user aborted a request.")) {
-            throw new Error("Сервер не отвечает. Попробуй ещё раз через пару секунд.");
+            throw new Error("Server is not responding. Try again in a few seconds.");
           }
           throw e;
         } finally {
@@ -1915,7 +1915,7 @@
         if (winRetryBtn) winRetryBtn.disabled = !!on;
         if (playBtn && on) {
           playBtn.dataset.prevText = playBtn.textContent;
-          playBtn.textContent = "Загрузка…";
+          playBtn.textContent = "Loading…";
         } else if (playBtn && playBtn.dataset.prevText) {
           // text восстановит refreshPlayUi
           delete playBtn.dataset.prevText;
@@ -1924,7 +1924,7 @@
 
       function showPlayError(msg) {
         if (hintLine) {
-          hintLine.textContent = msg || "Ошибка";
+          hintLine.textContent = msg || "Error";
           hintLine.className = "hint-line warn";
         }
       }
@@ -1960,7 +1960,7 @@
           // всегда обновляем кнопку (free / играть / пополнить)
           refreshPlayUi();
           if (claimBtn) {
-            claimBtn.textContent = "На баланс · " + previewPrize() + " ⭐";
+            claimBtn.textContent = "To balance · " + previewPrize() + " ⭐";
           }
           if (winPrizePill) winPrizePill.textContent = "⭐ +" + previewPrize();
         } catch (e) {
@@ -2005,7 +2005,7 @@
               });
               return true;
             }
-            const msg = "Открой игру через кнопку «Играть» в боте";
+            const msg = "Open the game via the Play button in the bot";
             if (errEl) errEl.textContent = msg;
             showPlayError(msg);
             return false;
@@ -2014,7 +2014,7 @@
           // нет user id — бесполезно ходить на сервер
           const body = authBody({ stake: currentStake });
           if (!body.userId && !isAdmin) {
-            const msg = "Не удалось определить аккаунт. Закрой и открой игру из бота.";
+            const msg = "Could not detect account. Close and reopen the game from the bot.";
             if (errEl) errEl.textContent = msg;
             showPlayError(msg);
             return false;
@@ -2022,7 +2022,7 @@
 
           if (!isAdmin && !freePlayAvailable && balance < currentStake) {
             openTopup();
-            showPlayError("Не хватает на ставку — пополни");
+            showPlayError("Not enough for bet — top up");
             return false;
           }
 
@@ -2060,7 +2060,7 @@
           if ((data && data.error === "insufficient") || (res && res.status === 402)) {
             if (data && typeof data.balance === "number") setBalance(data.balance, false);
             openTopup();
-            const m = (data && data.message) || "Недостаточно ⭐";
+            const m = (data && data.message) || "Not enough ⭐";
             if (errEl) errEl.textContent = m;
             showPlayError(m);
             return false;
@@ -2068,17 +2068,17 @@
           if ((data && data.error === "open_in_telegram") || (res && res.status === 401)) {
             const m =
               (data && data.message) ||
-              "Открой игру заново через кнопку «Играть» в боте";
+              "Reopen the game via the Play button in the bot";
             if (errEl) errEl.textContent = m;
             showPlayError(m);
             return false;
           }
           throw new Error(
-            (data && (data.message || data.error)) || "Не удалось начать игру"
+            (data && (data.message || data.error)) || "Could not start game"
           );
         } catch (e) {
           console.error(e);
-          const m = (e && e.message) || "Ошибка запуска";
+          const m = (e && e.message) || "Start error";
           if (errEl) errEl.textContent = m;
           showPlayError(m);
           return false;
@@ -2110,7 +2110,7 @@
           }
 
           if (!canOpenInvoice()) {
-            topupErr.textContent = "Открой игру через Telegram-бота (кнопка «Играть»).";
+            topupErr.textContent = "Open the game via the Telegram bot (Play button).";
             return;
           }
 
@@ -2130,7 +2130,7 @@
             throw new Error(
               (typeof data.error === "string" && data.error) ||
                 data.message ||
-                "Не удалось создать счёт"
+                "Could not create invoice"
             );
           }
 
@@ -2143,30 +2143,30 @@
                 // Fallback: если webhook/polling ещё не успел — optimistic +amount
                 // (сервер — источник истины; refreshMe уже запросил)
                 closeTopup();
-                hintLine.textContent = "Баланс пополнен! Можно играть 🎉";
+                hintLine.textContent = "Balance topped up! You can play 🎉";
                 hintLine.className = "hint-line ok";
                 try {
                   if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
                 } catch (_) {}
                 resolve(true);
               } else if (status === "cancelled") {
-                topupErr.textContent = "Оплата отменена";
+                topupErr.textContent = "Payment cancelled";
                 resolve(false);
               } else if (status === "failed") {
-                topupErr.textContent = "Оплата не прошла. Попробуй ещё раз.";
+                topupErr.textContent = "Payment failed. Try again.";
                 resolve(false);
               } else if (status === "pending") {
-                topupErr.textContent = "Платёж в обработке…";
+                topupErr.textContent = "Payment pending…";
                 resolve(false);
               } else {
-                topupErr.textContent = "Статус: " + status;
+                topupErr.textContent = "Status: " + status;
                 resolve(false);
               }
             });
           });
         } catch (e) {
           console.error(e);
-          let msg = e.message || "Ошибка оплаты";
+          let msg = e.message || "Payment error";
           if (msg.length > 160) msg = msg.slice(0, 160) + "…";
           topupErr.textContent = msg;
         } finally {
