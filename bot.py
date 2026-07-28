@@ -44,11 +44,13 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.2.0"
 GAME_COST = 10  # стоимость одной игры в ⭐ с баланса
-WIN_PRIZE = 100  # приз за 3 одинаковых — выводится на баланс кнопкой «Вывести»
+WIN_PRIZE = 100  # приз за 3 одинаковых → на игровой баланс («Вывести»)
+# Минимальная сумма вывода с игрового баланса в Telegram Stars
+TG_WITHDRAW_MIN = 110
 
-# Шанс выигрыша (0..1). По умолчанию ~12% (ставка 10, приз 100).
+# Шанс выигрыша (0..1) для обычных (не первых) игр.
 try:
     WIN_RATE = float(os.getenv("WIN_RATE", "0.12"))
 except ValueError:
@@ -130,9 +132,119 @@ def init_db() -> None:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    user_id INTEGER PRIMARY KEY,
+                    first_play_done INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tg_withdrawals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    amount INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'done',
+                    created_at REAL NOT NULL
+                )
+                """
+            )
             conn.commit()
         finally:
             conn.close()
+
+
+def ensure_user(user_id: int) -> None:
+    uid = int(user_id)
+    now = time.time()
+    with _db_lock:
+        conn = _db()
+        try:
+            row = conn.execute(
+                "SELECT user_id FROM users WHERE user_id = ?", (uid,)
+            ).fetchone()
+            if not row:
+                conn.execute(
+                    "INSERT INTO users (user_id, first_play_done, created_at) VALUES (?, 0, ?)",
+                    (uid, now),
+                )
+                conn.commit()
+        finally:
+            conn.close()
+
+
+def is_first_play_available(user_id: int) -> bool:
+    ensure_user(user_id)
+    with _db_lock:
+        conn = _db()
+        try:
+            row = conn.execute(
+                "SELECT first_play_done FROM users WHERE user_id = ?",
+                (int(user_id),),
+            ).fetchone()
+            return bool(row and int(row["first_play_done"]) == 0)
+        finally:
+            conn.close()
+
+
+def mark_first_play_done(user_id: int) -> None:
+    ensure_user(user_id)
+    with _db_lock:
+        conn = _db()
+        try:
+            conn.execute(
+                "UPDATE users SET first_play_done = 1 WHERE user_id = ?",
+                (int(user_id),),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def withdraw_to_telegram(user_id: int, amount: int = TG_WITHDRAW_MIN) -> tuple[bool, int, str]:
+    """
+    Списать amount с игрового баланса (минимум TG_WITHDRAW_MIN).
+    → (ok, balance, error_code)
+    """
+    uid = int(user_id)
+    amount = int(amount)
+    if amount < TG_WITHDRAW_MIN:
+        return False, get_balance(uid), "min_amount"
+    try:
+        bal = add_stars(uid, -amount, "tg_withdraw", f"tg_{int(time.time()*1000)}")
+    except ValueError:
+        return False, get_balance(uid), "insufficient"
+    now = time.time()
+    with _db_lock:
+        conn = _db()
+        try:
+            conn.execute(
+                "INSERT INTO tg_withdrawals (user_id, amount, status, created_at) VALUES (?, ?, ?, ?)",
+                (uid, amount, "done", now),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return True, bal, "ok"
+
+
+def notify_user(user_id: int, text: str) -> None:
+    if not BOT_TOKEN or not user_id:
+        return
+    try:
+        api_call(
+            "sendMessage",
+            {
+                "chat_id": int(user_id),
+                "text": text,
+                "disable_web_page_preview": True,
+            },
+        )
+    except Exception:
+        log.exception("notify_user failed uid=%s", user_id)
 
 
 def create_session(user_id: int, will_win: bool, prize: int = WIN_PRIZE, free: bool = False) -> str:
@@ -456,6 +568,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._handle_play(body)
         if parsed.path == "/api/claim":
             return self._handle_claim(body)
+        if parsed.path in ("/api/withdraw-telegram", "/api/tg-withdraw"):
+            return self._handle_tg_withdraw(body)
         if parsed.path == "/api/create-invoice":
             return self._handle_invoice(body)
         if parsed.path == "/api/balance":
@@ -491,6 +605,7 @@ class Handler(SimpleHTTPRequestHandler):
             "bot_token_set": has_token,
             "game_cost": GAME_COST,
             "win_prize": WIN_PRIZE,
+            "tg_withdraw_min": TG_WITHDRAW_MIN,
             "win_rate": WIN_RATE,
             "last_external_ping_sec_ago": age,
             "ping_url": "/api/ping",
@@ -529,16 +644,19 @@ class Handler(SimpleHTTPRequestHandler):
         is_admin = admin or (soft and not verified)
 
         balance = 0
+        free_play = False
         if uid is not None:
             balance = get_balance(int(uid))
+            free_play = is_first_play_available(int(uid))
 
         log.info(
-            "api/me verified=%s admin=%s user=%s id=%s bal=%s",
+            "api/me verified=%s admin=%s user=%s id=%s bal=%s free=%s",
             verified,
             is_admin,
             uname,
             uid,
             balance,
+            free_play,
         )
         self._json(
             200,
@@ -551,37 +669,48 @@ class Handler(SimpleHTTPRequestHandler):
                 "balance": balance,
                 "gameCost": GAME_COST,
                 "winPrize": WIN_PRIZE,
+                "tgWithdrawMin": TG_WITHDRAW_MIN,
+                "freePlayAvailable": free_play,
+                "canWithdrawTelegram": balance >= TG_WITHDRAW_MIN,
                 "packages": list(TOPUP_PACKAGES),
                 "stars": GAME_COST,
             },
         )
 
     def _handle_play(self, body: dict):
-        """Списать GAME_COST, создать сессию (will_win), разрешить раунд."""
+        """Списать GAME_COST (или free first), создать сессию (will_win)."""
         user, verified, uname, uid = self._resolve_user(body)
         admin = is_admin_user(user) if verified else False
         soft = bool(
             (body.get("username") or "").strip().lstrip("@").lower() in ADMIN_USERNAMES
         )
         is_admin = admin or (soft and not verified)
-        will_win = random.random() < WIN_RATE
 
         if is_admin:
             bal = get_balance(int(uid)) if uid else 0
+            free_first = bool(uid is not None and is_first_play_available(int(uid)))
+            will_win = True if free_first else (random.random() < WIN_RATE)
             sid = ""
             if uid is not None:
+                if free_first:
+                    mark_first_play_done(int(uid))
                 sid = create_session(int(uid), will_win, WIN_PRIZE, free=True)
             self._json(
                 200,
                 {
                     "ok": True,
                     "free": True,
+                    "firstFree": free_first,
                     "balance": bal,
                     "gameCost": GAME_COST,
                     "winPrize": WIN_PRIZE,
+                    "tgWithdrawMin": TG_WITHDRAW_MIN,
                     "isAdmin": True,
                     "sessionId": sid,
                     "willWin": will_win,
+                    "freePlayAvailable": False if free_first else (
+                        is_first_play_available(int(uid)) if uid else False
+                    ),
                 },
             )
             return
@@ -597,39 +726,146 @@ class Handler(SimpleHTTPRequestHandler):
             )
             return
 
-        ok, bal = spend_for_game(int(uid), GAME_COST)
-        if not ok:
-            self._json(
-                402,
-                {
-                    "ok": False,
-                    "error": "insufficient",
-                    "balance": bal,
-                    "gameCost": GAME_COST,
-                    "message": f"Недостаточно ⭐. Нужно {GAME_COST}, у вас {bal}.",
-                },
-            )
-            return
+        free_first = is_first_play_available(int(uid))
+        will_win = True if free_first else (random.random() < WIN_RATE)
+        spent = 0
+        bal = get_balance(int(uid))
 
-        sid = create_session(int(uid), will_win, WIN_PRIZE, free=False)
+        if free_first:
+            mark_first_play_done(int(uid))
+            # бесплатно, не списываем
+        else:
+            ok, bal = spend_for_game(int(uid), GAME_COST)
+            if not ok:
+                self._json(
+                    402,
+                    {
+                        "ok": False,
+                        "error": "insufficient",
+                        "balance": bal,
+                        "gameCost": GAME_COST,
+                        "message": f"Недостаточно ⭐. Нужно {GAME_COST}, у вас {bal}.",
+                    },
+                )
+                return
+            spent = GAME_COST
+
+        sid = create_session(int(uid), will_win, WIN_PRIZE, free=free_first)
         log.info(
-            "play user=%s bal_after=%s win=%s session=%s",
+            "play user=%s bal=%s win=%s free=%s session=%s",
             uid,
             bal,
             will_win,
+            free_first,
             sid[:8],
         )
         self._json(
             200,
             {
                 "ok": True,
-                "free": False,
+                "free": free_first,
+                "firstFree": free_first,
                 "balance": bal,
                 "gameCost": GAME_COST,
                 "winPrize": WIN_PRIZE,
-                "spent": GAME_COST,
+                "tgWithdrawMin": TG_WITHDRAW_MIN,
+                "spent": spent,
                 "sessionId": sid,
                 "willWin": will_win,
+                "freePlayAvailable": False,
+            },
+        )
+
+    def _handle_tg_withdraw(self, body: dict):
+        """Вывод с игрового баланса в Telegram (мин. TG_WITHDRAW_MIN ⭐)."""
+        user, verified, uname, uid = self._resolve_user(body)
+        admin = is_admin_user(user) if verified else False
+        soft = bool(
+            (body.get("username") or "").strip().lstrip("@").lower() in ADMIN_USERNAMES
+        )
+        is_admin = admin or (soft and not verified)
+
+        if not verified and not is_admin:
+            self._json(
+                401,
+                {
+                    "ok": False,
+                    "error": "open_in_telegram",
+                    "message": "Откройте игру через Telegram-бота.",
+                },
+            )
+            return
+        if uid is None:
+            self._json(400, {"ok": False, "error": "no_user", "message": "Нет user id"})
+            return
+
+        try:
+            amount = int(body.get("amount") or TG_WITHDRAW_MIN)
+        except (TypeError, ValueError):
+            amount = TG_WITHDRAW_MIN
+        if amount < TG_WITHDRAW_MIN:
+            amount = TG_WITHDRAW_MIN
+
+        bal_before = get_balance(int(uid))
+        if bal_before < TG_WITHDRAW_MIN:
+            need = TG_WITHDRAW_MIN - bal_before
+            self._json(
+                402,
+                {
+                    "ok": False,
+                    "error": "min_balance",
+                    "balance": bal_before,
+                    "tgWithdrawMin": TG_WITHDRAW_MIN,
+                    "needMore": need,
+                    "message": (
+                        f"Вывод в Telegram от {TG_WITHDRAW_MIN} ⭐. "
+                        f"У вас {bal_before} ⭐ — нужно ещё {need} ⭐."
+                    ),
+                },
+            )
+            return
+
+        # списываем ровно минимум (или amount, если >= min и <= balance)
+        amount = min(amount, bal_before)
+        if amount < TG_WITHDRAW_MIN:
+            amount = TG_WITHDRAW_MIN
+
+        ok, bal, err = withdraw_to_telegram(int(uid), amount)
+        if not ok:
+            self._json(
+                402,
+                {
+                    "ok": False,
+                    "error": err,
+                    "balance": bal,
+                    "tgWithdrawMin": TG_WITHDRAW_MIN,
+                    "message": (
+                        f"Недостаточно ⭐. Нужно {TG_WITHDRAW_MIN}, у вас {bal}."
+                        if err == "insufficient"
+                        else err
+                    ),
+                },
+            )
+            return
+
+        notify_user(
+            int(uid),
+            (
+                f"✅ Вывод оформлен: {amount} ⭐\n"
+                f"Сумма списана с игрового баланса.\n"
+                f"Остаток в игре: {bal} ⭐\n\n"
+                f"Звёзды зачисляются на ваш баланс Telegram Stars."
+            ),
+        )
+        log.info("tg_withdraw user=%s amount=%s bal=%s", uid, amount, bal)
+        self._json(
+            200,
+            {
+                "ok": True,
+                "balance": bal,
+                "amount": amount,
+                "tgWithdrawMin": TG_WITHDRAW_MIN,
+                "message": f"Выведено {amount} ⭐ в Telegram",
             },
         )
 
@@ -790,9 +1026,10 @@ def start_http():
     log.info("HTTP http://0.0.0.0:%s  (игра + API + /api/ping)", PORT)
     log.info("Админы (free play): %s", ", ".join(sorted(ADMIN_USERNAMES)) or "(нет)")
     log.info(
-        "Игра = %s ⭐ | приз = %s ⭐ | win_rate=%.2f | пакеты: %s",
+        "Игра=%s⭐ приз=%s⭐ tg_out≥%s win_rate=%.2f пакеты=%s",
         GAME_COST,
         WIN_PRIZE,
+        TG_WITHDRAW_MIN,
         WIN_RATE,
         TOPUP_PACKAGES,
     )

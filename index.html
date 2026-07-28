@@ -429,32 +429,64 @@
       animation: bal-bump 0.45s cubic-bezier(0.34, 1.4, 0.64, 1);
     }
 
-    .topup-btn {
+    .bar-actions {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .topup-btn,
+    .withdraw-btn {
       appearance: none;
       border: none;
       cursor: pointer;
       font: inherit;
       font-weight: 700;
-      font-size: 0.9rem;
+      font-size: 0.82rem;
       color: #1a1408;
       background: linear-gradient(180deg, #f0d878 0%, #c9a227 100%);
-      padding: 12px 16px;
+      padding: 11px 12px;
       border-radius: 12px;
       white-space: nowrap;
       box-shadow: 0 4px 14px rgba(201, 162, 39, 0.3);
-      transition: transform 0.12s ease;
+      transition: transform 0.12s ease, opacity 0.15s ease;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
     }
 
-    .topup-btn:active {
+    .withdraw-btn {
+      background: linear-gradient(180deg, #8ee0b4 0%, #3a9b6a 100%);
+      color: #062016;
+      box-shadow: 0 4px 14px rgba(58, 155, 106, 0.3);
+    }
+
+    .withdraw-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      filter: grayscale(0.35);
+      box-shadow: none;
+    }
+
+    .topup-btn:active:not(:disabled),
+    .withdraw-btn:active:not(:disabled) {
       transform: scale(0.96);
     }
 
     .topup-btn.attention {
       animation: pulse-glow 1.6s ease-in-out infinite;
     }
+
+    .free-badge {
+      display: none;
+      margin-top: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--ok);
+      letter-spacing: 0.02em;
+    }
+
+    .free-badge.show { display: block; }
 
     /* ── Overlays / modals ── */
     .overlay {
@@ -667,6 +699,7 @@
 
     <div class="play-area" id="playArea">
       <button type="button" class="btn btn-pulse" id="playBtn">Играть · 10 ⭐</button>
+      <p class="free-badge" id="freeBadge">🎁 Первая игра бесплатно · гарантированный выигрыш</p>
       <p class="hint-line" id="hintLine">Пополни баланс и начинай</p>
     </div>
   </div>
@@ -681,9 +714,14 @@
           <span id="balanceNum">…</span>
         </div>
       </div>
-      <button type="button" class="topup-btn" id="topupBtn">
-        <span>+</span> Пополнить
-      </button>
+      <div class="bar-actions">
+        <button type="button" class="withdraw-btn" id="tgWithdrawBtn" disabled title="От 110 ⭐">
+          В Telegram
+        </button>
+        <button type="button" class="topup-btn" id="topupBtn">
+          <span>+</span> Пополнить
+        </button>
+      </div>
     </div>
   </div>
 
@@ -712,20 +750,39 @@
     </div>
   </div>
 
-  <!-- Выигрыш + вывод на баланс -->
+  <!-- Выигрыш + вывод на игровой баланс -->
   <div class="overlay center" id="winOverlay" role="dialog" aria-modal="true">
     <div class="sheet">
       <div class="lose-emoji">🎉</div>
       <h2>Победа!</h2>
       <p class="lead" id="winLead">Три одинаковых! Забери приз на баланс.</p>
       <div class="pill-row"><span class="cost-pill" id="winPrizePill">⭐ +100</span></div>
-      <button type="button" class="btn btn-pulse" id="claimBtn">Вывести · 100 ⭐</button>
+      <button type="button" class="btn btn-pulse" id="claimBtn">На баланс · 100 ⭐</button>
       <div id="winAfterClaim" class="hidden" style="margin-top:10px;width:100%">
         <p class="hint-line ok" id="claimOk" style="margin-bottom:10px">Приз на балансе!</p>
+        <p class="hint-line" id="claimTgHint" style="margin-bottom:10px">
+          В Telegram можно вывести от 110 ⭐
+        </p>
         <button type="button" class="btn" id="winRetryBtn">Сыграть ещё · 10 ⭐</button>
         <button type="button" class="btn btn-ghost" id="winClose" style="margin-top:8px">На главный</button>
       </div>
       <p class="err" id="claimErr"></p>
+    </div>
+  </div>
+
+  <!-- Вывод в Telegram Stars -->
+  <div class="overlay" id="tgWithdrawOverlay" role="dialog" aria-modal="true">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <h2>Вывод в Telegram</h2>
+      <p class="lead" id="tgWithdrawLead">
+        Вывести звёзды с игрового баланса на баланс Telegram Stars.
+        Минимум — <strong>110 ⭐</strong>.
+      </p>
+      <div class="pill-row"><span class="cost-pill" id="tgWithdrawPill">⭐ 110</span></div>
+      <button type="button" class="btn" id="tgWithdrawConfirm">Вывести 110 ⭐</button>
+      <button type="button" class="btn btn-ghost" id="tgWithdrawClose" style="margin-top:8px">Закрыть</button>
+      <p class="err" id="tgWithdrawErr"></p>
     </div>
   </div>
 
@@ -751,6 +808,8 @@
       const MAX_ATTEMPTS = 3;
       let GAME_COST = 10;
       let WIN_PRIZE = 100;
+      let TG_WITHDRAW_MIN = 110;
+      let freePlayAvailable = false;
       let PACKAGES = [10, 30, 50, 100, 250];
       const ADMIN_USERNAMES = ["bonamartin69"];
 
@@ -782,6 +841,15 @@
       const winClose = document.getElementById("winClose");
       const winPrizePill = document.getElementById("winPrizePill");
       const winLead = document.getElementById("winLead");
+      const freeBadge = document.getElementById("freeBadge");
+      const claimTgHint = document.getElementById("claimTgHint");
+      const tgWithdrawBtn = document.getElementById("tgWithdrawBtn");
+      const tgWithdrawOverlay = document.getElementById("tgWithdrawOverlay");
+      const tgWithdrawLead = document.getElementById("tgWithdrawLead");
+      const tgWithdrawPill = document.getElementById("tgWithdrawPill");
+      const tgWithdrawConfirm = document.getElementById("tgWithdrawConfirm");
+      const tgWithdrawClose = document.getElementById("tgWithdrawClose");
+      const tgWithdrawErr = document.getElementById("tgWithdrawErr");
 
       let deck = [];
       let attemptsLeft = MAX_ATTEMPTS;
@@ -868,19 +936,57 @@
 
       function refreshPlayUi() {
         const costTxt = GAME_COST + " ⭐";
-        costLabel.textContent = isAdmin ? "бесплатно" : costTxt;
-        loseCostPill.textContent = isAdmin ? "👑 бесплатно" : "⭐ " + GAME_COST + " за игру";
+        costLabel.textContent = isAdmin
+          ? "бесплатно"
+          : freePlayAvailable
+            ? "free"
+            : costTxt;
+        loseCostPill.textContent = isAdmin
+          ? "👑 бесплатно"
+          : freePlayAvailable
+            ? "🎁 первая free"
+            : "⭐ " + GAME_COST + " за игру";
+
+        // Кнопка вывода в Telegram
+        const canTg = balance >= TG_WITHDRAW_MIN;
+        tgWithdrawBtn.disabled = !canTg;
+        tgWithdrawBtn.title = canTg
+          ? "Вывести " + TG_WITHDRAW_MIN + " ⭐ в Telegram"
+          : "Нужно " + TG_WITHDRAW_MIN + " ⭐ (у вас " + balance + ")";
+        tgWithdrawPill.textContent = "⭐ " + TG_WITHDRAW_MIN;
+        if (winRetryBtn) {
+          winRetryBtn.textContent = freePlayAvailable
+            ? "Сыграть ещё бесплатно"
+            : isAdmin
+              ? "Сыграть ещё (free)"
+              : "Сыграть ещё · " + GAME_COST + " ⭐";
+        }
 
         if (inRound) {
           playArea.classList.add("hidden");
           attemptsChip.classList.add("live");
           boardEl.classList.remove("preview");
+          freeBadge.classList.remove("show");
           return;
         }
 
         playArea.classList.remove("hidden");
         attemptsChip.classList.remove("live");
         boardEl.classList.add("preview");
+
+        if (freePlayAvailable) {
+          freeBadge.classList.add("show");
+          playBtn.textContent = "Играть бесплатно 🎁";
+          playBtn.classList.add("btn-pulse");
+          topupBtn.classList.remove("attention");
+          hintLine.textContent =
+            "Первая игра free · приз " + WIN_PRIZE + " ⭐ · вывод в TG от " + TG_WITHDRAW_MIN;
+          hintLine.className = "hint-line ok";
+          retryBtn.textContent = "Сыграть бесплатно 🎁";
+          return;
+        }
+
+        freeBadge.classList.remove("show");
 
         if (isAdmin) {
           playBtn.textContent = "Играть бесплатно";
@@ -898,7 +1004,15 @@
           playBtn.textContent = "Играть · " + GAME_COST + " ⭐";
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.remove("attention");
-          hintLine.textContent = "Хватит на " + Math.floor(balance / GAME_COST) + " игр";
+          let hint =
+            "Хватит на " + Math.floor(balance / GAME_COST) + " игр";
+          if (balance < TG_WITHDRAW_MIN) {
+            hint +=
+              " · до вывода в TG ещё " + (TG_WITHDRAW_MIN - balance) + " ⭐";
+          } else {
+            hint += " · можно вывести в Telegram";
+          }
+          hintLine.textContent = hint;
           hintLine.className = "hint-line ok";
         } else {
           playBtn.textContent = "Пополнить и играть";
@@ -1090,11 +1204,12 @@
         winOverlay.classList.remove("show");
         claimBtn.classList.remove("hidden");
         claimBtn.disabled = false;
-        claimBtn.textContent = "Вывести · " + WIN_PRIZE + " ⭐";
+        claimBtn.textContent = "На баланс · " + WIN_PRIZE + " ⭐";
         winAfterClaim.classList.add("hidden");
         claimErr.textContent = "";
         winPrizePill.textContent = "⭐ +" + WIN_PRIZE;
         closeTopup();
+        tgWithdrawOverlay.classList.remove("show");
         refreshPlayUi();
         try {
           if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("medium");
@@ -1248,7 +1363,7 @@
             "Три «" + matchFruit.label + "»! Выведи " + WIN_PRIZE + " ⭐ на баланс.";
         }
         winPrizePill.textContent = "⭐ +" + WIN_PRIZE;
-        claimBtn.textContent = "Вывести · " + WIN_PRIZE + " ⭐";
+        claimBtn.textContent = "На баланс · " + WIN_PRIZE + " ⭐";
         claimBtn.classList.remove("hidden");
         claimBtn.disabled = false;
         winAfterClaim.classList.add("hidden");
@@ -1256,7 +1371,6 @@
         prizeClaimed = false;
 
         setTimeout(() => {
-          // открыть остальные тускло
           cards.forEach((c) => {
             if (!c.classList.contains("flipped")) {
               c.classList.add("flipped", "dim");
@@ -1336,15 +1450,122 @@
       function onClaimSuccess(bal) {
         claimBtn.classList.add("hidden");
         winAfterClaim.classList.remove("hidden");
+        const total = typeof bal === "number" ? bal : balance;
         claimOk.textContent =
-          "+" + WIN_PRIZE + " ⭐ на балансе" +
+          "+" + WIN_PRIZE + " ⭐ на игровом балансе" +
           (typeof bal === "number" ? " · всего " + bal : "") +
           " 🎉";
-        hintLine.textContent = "Приз выведен на баланс";
+        if (claimTgHint) {
+          if (total >= TG_WITHDRAW_MIN) {
+            claimTgHint.textContent =
+              "Можно вывести в Telegram · кнопка «В Telegram» внизу";
+            claimTgHint.className = "hint-line ok";
+          } else {
+            claimTgHint.textContent =
+              "В Telegram — от " +
+              TG_WITHDRAW_MIN +
+              " ⭐ · ещё " +
+              (TG_WITHDRAW_MIN - total) +
+              " ⭐ (пополни)";
+            claimTgHint.className = "hint-line warn";
+          }
+        }
+        hintLine.textContent = "Приз на игровом балансе";
         hintLine.className = "hint-line ok";
+        refreshPlayUi();
         try {
           if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
         } catch (_) {}
+      }
+
+      function openTgWithdraw() {
+        tgWithdrawErr.textContent = "";
+        if (balance < TG_WITHDRAW_MIN) {
+          const need = TG_WITHDRAW_MIN - balance;
+          tgWithdrawLead.innerHTML =
+            "Вывод в Telegram от <strong>" +
+            TG_WITHDRAW_MIN +
+            " ⭐</strong>.<br>У вас <strong>" +
+            balance +
+            " ⭐</strong> — нужно ещё <strong>" +
+            need +
+            " ⭐</strong>. Пополни баланс.";
+          tgWithdrawConfirm.textContent = "Пополнить";
+          tgWithdrawConfirm.dataset.mode = "topup";
+        } else {
+          tgWithdrawLead.innerHTML =
+            "Списать <strong>" +
+            TG_WITHDRAW_MIN +
+            " ⭐</strong> с игрового баланса и отправить на баланс Telegram Stars.";
+          tgWithdrawConfirm.textContent = "Вывести " + TG_WITHDRAW_MIN + " ⭐";
+          tgWithdrawConfirm.dataset.mode = "withdraw";
+        }
+        tgWithdrawPill.textContent = "⭐ " + TG_WITHDRAW_MIN;
+        tgWithdrawOverlay.classList.add("show");
+      }
+
+      function closeTgWithdraw() {
+        tgWithdrawOverlay.classList.remove("show");
+      }
+
+      async function doTgWithdraw() {
+        tgWithdrawErr.textContent = "";
+        if (tgWithdrawConfirm.dataset.mode === "topup") {
+          closeTgWithdraw();
+          openTopup();
+          return;
+        }
+        if (loading) return;
+        if (balance < TG_WITHDRAW_MIN) {
+          tgWithdrawErr.textContent =
+            "Нужно " + TG_WITHDRAW_MIN + " ⭐ (у вас " + balance + ")";
+          return;
+        }
+        loading = true;
+        tgWithdrawConfirm.disabled = true;
+        try {
+          if (!inTelegram && /[?&#]demo=1(?:&|$)/.test(location.href)) {
+            setBalance(balance - TG_WITHDRAW_MIN, true);
+            tgWithdrawErr.textContent = "";
+            closeTgWithdraw();
+            hintLine.textContent =
+              "Демо: −" + TG_WITHDRAW_MIN + " ⭐ (вывод в TG)";
+            hintLine.className = "hint-line ok";
+            return;
+          }
+          const { res, data } = await apiPost(
+            "/api/withdraw-telegram",
+            authBody({ amount: TG_WITHDRAW_MIN })
+          );
+          if (data.ok) {
+            if (typeof data.balance === "number") setBalance(data.balance, true);
+            else setBalance(balance - TG_WITHDRAW_MIN, true);
+            closeTgWithdraw();
+            hintLine.textContent =
+              data.message || "Выведено " + TG_WITHDRAW_MIN + " ⭐ в Telegram";
+            hintLine.className = "hint-line ok";
+            try {
+              if (tg && tg.HapticFeedback) {
+                tg.HapticFeedback.notificationOccurred("success");
+              }
+            } catch (_) {}
+            return;
+          }
+          if (data.error === "min_balance" || res.status === 402) {
+            if (typeof data.balance === "number") setBalance(data.balance, false);
+            tgWithdrawErr.textContent =
+              data.message || "Недостаточно для вывода";
+            return;
+          }
+          throw new Error(data.message || data.error || "Ошибка вывода");
+        } catch (e) {
+          console.error(e);
+          tgWithdrawErr.textContent = e.message || "Ошибка";
+        } finally {
+          loading = false;
+          tgWithdrawConfirm.disabled = false;
+          refreshPlayUi();
+        }
       }
 
       async function apiPost(path, body) {
@@ -1379,6 +1600,10 @@
           const { data } = await apiPost("/api/me", authBody());
           if (data.gameCost) GAME_COST = data.gameCost;
           if (data.winPrize) WIN_PRIZE = data.winPrize;
+          if (data.tgWithdrawMin) TG_WITHDRAW_MIN = data.tgWithdrawMin;
+          if (typeof data.freePlayAvailable === "boolean") {
+            freePlayAvailable = data.freePlayAvailable;
+          }
           if (Array.isArray(data.packages) && data.packages.length) {
             PACKAGES = data.packages;
             renderPackages();
@@ -1386,7 +1611,7 @@
           if (data.isAdmin) isAdmin = true;
           if (typeof data.balance === "number") setBalance(data.balance, false);
           else refreshPlayUi();
-          claimBtn.textContent = "Вывести · " + WIN_PRIZE + " ⭐";
+          claimBtn.textContent = "На баланс · " + WIN_PRIZE + " ⭐";
           winPrizePill.textContent = "⭐ +" + WIN_PRIZE;
         } catch (e) {
           console.warn("refreshMe", e);
@@ -1407,44 +1632,22 @@
         if (errEl) errEl.textContent = "";
 
         try {
-          // Админ
-          if (isAdmin || isLocalAdmin()) {
-            isAdmin = true;
-            // всё равно спросим сервер, чтобы получить session/willWin
-            try {
-              const { data } = await apiPost("/api/play", authBody());
-              if (data && data.ok) {
-                startRound({
-                  sessionId: data.sessionId || "",
-                  willWin: !!data.willWin,
-                  winPrize: data.winPrize || WIN_PRIZE,
-                });
-                if (typeof data.balance === "number") setBalance(data.balance, false);
-                return true;
-              }
-            } catch (_) {}
-            startRound({
-              sessionId: "",
-              willWin: Math.random() < 0.12,
-              winPrize: WIN_PRIZE,
-            });
-            return true;
-          }
-
-          if (balance < GAME_COST) {
-            openTopup();
-            hintLine.textContent = "Выбери пакет и пополни баланс";
-            hintLine.className = "hint-line warn";
-            return false;
-          }
-
           // Демо в браузере
           if (!inTelegram) {
             if (/[?&#]demo=1(?:&|$)/.test(location.href)) {
-              setBalance(balance - GAME_COST, true);
+              const first = freePlayAvailable || !localStorage.getItem("bw_played");
+              if (!first && balance < GAME_COST) {
+                openTopup();
+                return false;
+              }
+              if (!first) setBalance(balance - GAME_COST, true);
+              if (first) {
+                freePlayAvailable = false;
+                localStorage.setItem("bw_played", "1");
+              }
               startRound({
                 sessionId: "demo",
-                willWin: Math.random() < 0.25,
+                willWin: first ? true : Math.random() < 0.2,
                 winPrize: WIN_PRIZE,
               });
               return true;
@@ -1455,13 +1658,25 @@
             return false;
           }
 
-          const { res, data } = await apiPost("/api/play", authBody());
-          if (data.isAdmin) {
-            isAdmin = true;
+          // Нужен баланс только если нет free play (админ/первая free — сервер сам)
+          if (!isAdmin && !freePlayAvailable && balance < GAME_COST) {
+            openTopup();
+            hintLine.textContent = "Выбери пакет и пополни баланс";
+            hintLine.className = "hint-line warn";
+            return false;
           }
+
+          const { res, data } = await apiPost("/api/play", authBody());
+          if (data.isAdmin) isAdmin = true;
+          if (typeof data.freePlayAvailable === "boolean") {
+            freePlayAvailable = data.freePlayAvailable;
+          } else if (data.firstFree || data.free) {
+            freePlayAvailable = false;
+          }
+
           if (data.ok) {
             if (typeof data.balance === "number") setBalance(data.balance, true);
-            else setBalance(balance - GAME_COST, true);
+            else if (data.spent) setBalance(balance - data.spent, true);
             startRound({
               sessionId: data.sessionId || "",
               willWin: !!data.willWin,
@@ -1583,7 +1798,7 @@
 
       // Events
       playBtn.addEventListener("click", async () => {
-        if (!isAdmin && balance < GAME_COST) {
+        if (!isAdmin && !freePlayAvailable && balance < GAME_COST) {
           openTopup();
           return;
         }
@@ -1591,7 +1806,7 @@
       });
 
       retryBtn.addEventListener("click", async () => {
-        if (!isAdmin && balance < GAME_COST) {
+        if (!isAdmin && !freePlayAvailable && balance < GAME_COST) {
           loseOverlay.classList.remove("show");
           openTopup();
           return;
@@ -1610,7 +1825,7 @@
       });
 
       winRetryBtn.addEventListener("click", async () => {
-        if (!isAdmin && balance < GAME_COST) {
+        if (!isAdmin && !freePlayAvailable && balance < GAME_COST) {
           winOverlay.classList.remove("show");
           openTopup();
           return;
@@ -1622,6 +1837,15 @@
       winClose.addEventListener("click", () => {
         winOverlay.classList.remove("show");
         prepareLobbyBoard();
+      });
+
+      tgWithdrawBtn.addEventListener("click", openTgWithdraw);
+      tgWithdrawClose.addEventListener("click", closeTgWithdraw);
+      tgWithdrawConfirm.addEventListener("click", () => {
+        doTgWithdraw();
+      });
+      tgWithdrawOverlay.addEventListener("click", (e) => {
+        if (e.target === tgWithdrawOverlay) closeTgWithdraw();
       });
 
       topupBtn.addEventListener("click", openTopup);
