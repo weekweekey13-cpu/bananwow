@@ -44,7 +44,7 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.4.1"
 GAME_COST = 10  # мин. ставка (совместимость)
 STAKE_MIN = 10
 STAKE_MAX = 200
@@ -1309,8 +1309,7 @@ def start_http():
     server.serve_forever()
 
 
-def play_keyboard() -> ReplyKeyboardMarkup:
-    # URL берём свежий (туннель мог смениться без рестарта процесса)
+def _webapp_url() -> str:
     global WEBAPP_URL
     fresh = detect_public_url() or WEBAPP_URL
     if fresh:
@@ -1318,10 +1317,53 @@ def play_keyboard() -> ReplyKeyboardMarkup:
     url = WEBAPP_URL or f"http://127.0.0.1:{PORT}/"
     if not url.endswith("/"):
         url += "/"
+    return url
+
+
+def play_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        [[KeyboardButton(text="🎮 Играть", web_app=WebAppInfo(url=url))]],
+        [[KeyboardButton(text="🎮 Играть", web_app=WebAppInfo(url=_webapp_url()))]],
         resize_keyboard=True,
     )
+
+
+# Тексты кнопок админ-клавиатуры (только для ADMIN_USERNAMES)
+BTN_PLAY = "🎮 Играть"
+BTN_PLAYERS = "👥 Игроки"
+BTN_TX = "📜 Транзакции"
+BTN_STATS = "📊 Сводка"
+BTN_RESET = "♻️ Сброс"
+BTN_RESET_OK = "✅ Подтвердить сброс"
+BTN_ADMIN = "👑 Меню"
+
+
+def admin_keyboard() -> ReplyKeyboardMarkup:
+    """Готовые кнопки — только админу, чтобы не вводить команды руками."""
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton(text=BTN_PLAY, web_app=WebAppInfo(url=_webapp_url()))],
+            [
+                KeyboardButton(text=BTN_PLAYERS),
+                KeyboardButton(text=BTN_TX),
+            ],
+            [
+                KeyboardButton(text=BTN_STATS),
+                KeyboardButton(text=BTN_ADMIN),
+            ],
+            [
+                KeyboardButton(text=BTN_RESET),
+                KeyboardButton(text=BTN_RESET_OK),
+            ],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
+
+def keyboard_for(user) -> ReplyKeyboardMarkup:
+    if is_admin_message(user):
+        return admin_keyboard()
+    return play_keyboard()
 
 
 def is_admin_message(user) -> bool:
@@ -1354,9 +1396,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if uname in ADMIN_USERNAMES:
         text = (
             "👑 Админ-режим\n\n"
-            "Команды: /admin\n"
+            "Кнопки внизу — управление без команд.\n"
             "Найди 3 одинаковых · ставка ×10\n"
-            "Жми «Играть» 👇"
+            "Или жми «Играть» 👇"
         )
     else:
         free_line = "🎁 Первая игра бесплатно!\n" if free else ""
@@ -1368,7 +1410,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Баланс: {bal} ⭐\n\n"
             "Жми «Играть» 👇"
         )
-    await update.message.reply_text(text, reply_markup=play_keyboard())
+    await update.message.reply_text(text, reply_markup=keyboard_for(user))
 
 
 async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1380,7 +1422,7 @@ async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bal = get_balance(user.id) if user else 0
     await update.message.reply_text(
         f"Баланс: {bal} ⭐ · ставка {STAKE_MIN}–{STAKE_MAX} ⭐",
-        reply_markup=play_keyboard(),
+        reply_markup=keyboard_for(user),
     )
 
 
@@ -1397,7 +1439,7 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Бесплатная игра: {free_txt}\n"
         f"Ставка {STAKE_MIN}–{STAKE_MAX} ⭐ · приз ×{WIN_MULTIPLIER}\n\n"
         "Пополнить можно в мини-приложении.",
-        reply_markup=play_keyboard(),
+        reply_markup=keyboard_for(u),
     )
 
 
@@ -1408,15 +1450,40 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Только для админа.")
         return
     await update.message.reply_text(
-        "👑 Админ-команды BANANAWOW\n\n"
-        "/reset — сброс всех игроков (free снова у всех)\n"
-        "/reset_confirm — подтвердить сброс\n"
-        "/players — никнеймы / id игравших\n"
-        "/tx — последние транзакции\n"
-        "/tx 50 — транзакции (до 100)\n"
-        "/stats — сводка\n\n"
+        "👑 Админ-панель BANANAWOW\n\n"
+        "Кнопки внизу:\n"
+        f"• {BTN_PLAYERS} — кто играл\n"
+        f"• {BTN_TX} — транзакции\n"
+        f"• {BTN_STATS} — сводка\n"
+        f"• {BTN_RESET} → потом {BTN_RESET_OK}\n"
+        f"• {BTN_PLAY} — открыть игру\n\n"
+        "Команды тоже работают: /players /tx /stats /reset\n\n"
         "Админы: " + ", ".join("@" + a for a in sorted(ADMIN_USERNAMES)),
+        reply_markup=admin_keyboard(),
     )
+
+
+async def on_admin_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка нажатий reply-кнопок (только админ)."""
+    if not update.message or not update.message.text:
+        return
+    if not is_admin_message(update.effective_user):
+        return
+    text = update.message.text.strip()
+    if text == BTN_PLAYERS:
+        await cmd_players(update, context)
+    elif text == BTN_TX:
+        # как /tx без аргументов
+        context.args = []
+        await cmd_tx(update, context)
+    elif text == BTN_STATS:
+        await cmd_stats(update, context)
+    elif text == BTN_RESET:
+        await cmd_reset(update, context)
+    elif text == BTN_RESET_OK:
+        await cmd_reset_confirm(update, context)
+    elif text == BTN_ADMIN:
+        await cmd_admin(update, context)
 
 
 async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1431,8 +1498,9 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• free-игры (снова всем можно 1 раз бесплатно)\n"
         "• сессии и историю транзакций\n"
         "• заявки на вывод\n\n"
-        "Чтобы подтвердить, отправь:\n"
-        "/reset_confirm"
+        f"Чтобы подтвердить, нажми:\n«{BTN_RESET_OK}»\n"
+        "или /reset_confirm",
+        reply_markup=admin_keyboard(),
     )
 
 
@@ -1454,7 +1522,8 @@ async def cmd_reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Все как будто никогда не заходили — free-игра снова у каждого.\n\n"
         "Удалено:\n" + "\n".join(lines) + "\n\n"
         "⚠️ У игроков в телефоне может остаться кэш кнопки — "
-        "пусть закроют мини-приложение и откроют снова."
+        "пусть закроют мини-приложение и откроют снова.",
+        reply_markup=admin_keyboard(),
     )
 
 
@@ -1466,7 +1535,9 @@ async def cmd_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     rows = get_players(60)
     if not rows:
-        await update.message.reply_text("Пока никого нет.")
+        await update.message.reply_text(
+            "Пока никого нет.", reply_markup=admin_keyboard()
+        )
         return
     lines = [f"👥 Игроки ({len(rows)}):\n"]
     for r in rows:
@@ -1479,7 +1550,7 @@ async def cmd_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Telegram limit ~4096
     if len(text) > 4000:
         text = text[:3900] + "\n…"
-    await update.message.reply_text(text)
+    await update.message.reply_text(text, reply_markup=admin_keyboard())
 
 
 async def cmd_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1496,7 +1567,9 @@ async def cmd_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
             n = 25
     rows = get_transactions(n)
     if not rows:
-        await update.message.reply_text("Транзакций пока нет.")
+        await update.message.reply_text(
+            "Транзакций пока нет.", reply_markup=admin_keyboard()
+        )
         return
     lines = [f"📜 Транзакции (последние {len(rows)}):\n"]
     for r in rows:
@@ -1509,7 +1582,7 @@ async def cmd_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "\n".join(lines)
     if len(text) > 4000:
         text = text[:3900] + "\n…"
-    await update.message.reply_text(text)
+    await update.message.reply_text(text, reply_markup=admin_keyboard())
 
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1529,7 +1602,8 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Сожжено ставками: {s['stakes_burned']} ⭐\n"
         f"Пополнений (ledger): {s['topups']} ⭐\n"
         f"Выплачено выигрышей: {s['wins_paid']} ⭐\n"
-        f"Версия: {APP_VERSION}"
+        f"Версия: {APP_VERSION}",
+        reply_markup=admin_keyboard(),
     )
 
 
@@ -1684,6 +1758,17 @@ def main():
             app_bot.add_handler(CommandHandler("players", cmd_players))
             app_bot.add_handler(CommandHandler(["tx", "transactions"], cmd_tx))
             app_bot.add_handler(CommandHandler("stats", cmd_stats))
+            # кнопки админ-клавиатуры (только reply text)
+            app_bot.add_handler(
+                MessageHandler(
+                    filters.TEXT
+                    & ~filters.COMMAND
+                    & filters.Regex(
+                        f"^({BTN_PLAYERS}|{BTN_TX}|{BTN_STATS}|{BTN_RESET}|{BTN_RESET_OK}|{BTN_ADMIN})$"
+                    ),
+                    on_admin_buttons,
+                )
+            )
             app_bot.add_handler(PreCheckoutQueryHandler(pre_checkout))
             app_bot.add_handler(
                 MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment)
