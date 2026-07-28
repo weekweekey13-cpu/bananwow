@@ -765,6 +765,10 @@
       <div class="chip" id="prizeChip">Приз: <strong id="prizeLabel">100 ⭐</strong></div>
     </div>
 
+    <div class="board-shell">
+      <div class="board locked preview" id="board" aria-label="Игровое поле"></div>
+    </div>
+
     <div class="stake-box" id="stakeBox">
       <div class="stake-head">
         <span>Ставка</span>
@@ -773,10 +777,6 @@
       <input type="range" id="stakeRange" class="stake-range" min="10" max="200" step="10" value="10" />
       <div class="stake-presets" id="stakePresets"></div>
       <p class="stake-hint">Выигрыш = ставка × <strong>10</strong></p>
-    </div>
-
-    <div class="board-shell">
-      <div class="board locked preview" id="board" aria-label="Игровое поле"></div>
     </div>
 
     <div class="play-area" id="playArea">
