@@ -18,6 +18,8 @@ import hmac
 import json
 import logging
 import os
+import random
+import secrets
 import sqlite3
 import threading
 import time
@@ -42,8 +44,16 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 GAME_COST = 10  # стоимость одной игры в ⭐ с баланса
+WIN_PRIZE = 100  # приз за 3 одинаковых — выводится на баланс кнопкой «Вывести»
+
+# Шанс выигрыша (0..1). По умолчанию ~12% (ставка 10, приз 100).
+try:
+    WIN_RATE = float(os.getenv("WIN_RATE", "0.12"))
+except ValueError:
+    WIN_RATE = 0.12
+WIN_RATE = max(0.0, min(1.0, WIN_RATE))
 
 # Пакеты пополнения: сколько ⭐ купить (= сумма XTR)
 TOPUP_PACKAGES = (10, 30, 50, 100, 250)
@@ -107,7 +117,109 @@ def init_db() -> None:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id TEXT PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    will_win INTEGER NOT NULL DEFAULT 0,
+                    claimed INTEGER NOT NULL DEFAULT 0,
+                    prize INTEGER NOT NULL DEFAULT 0,
+                    free INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL NOT NULL
+                )
+                """
+            )
             conn.commit()
+        finally:
+            conn.close()
+
+
+def create_session(user_id: int, will_win: bool, prize: int = WIN_PRIZE, free: bool = False) -> str:
+    sid = secrets.token_hex(16)
+    now = time.time()
+    with _db_lock:
+        conn = _db()
+        try:
+            conn.execute(
+                """
+                INSERT INTO sessions (id, user_id, will_win, claimed, prize, free, created_at)
+                VALUES (?, ?, ?, 0, ?, ?, ?)
+                """,
+                (sid, int(user_id), 1 if will_win else 0, int(prize), 1 if free else 0, now),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return sid
+
+
+def claim_win(session_id: str, user_id: int) -> tuple[bool, int, str]:
+    """
+    Вывести приз сессии на баланс.
+    → (ok, balance, message)
+    """
+    sid = (session_id or "").strip()
+    uid = int(user_id)
+    if not sid:
+        return False, get_balance(uid), "no_session"
+
+    with _db_lock:
+        conn = _db()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT user_id, will_win, claimed, prize FROM sessions WHERE id = ?",
+                (sid,),
+            ).fetchone()
+            if not row:
+                conn.rollback()
+                return False, get_balance(uid), "session_not_found"
+            if int(row["user_id"]) != uid:
+                conn.rollback()
+                return False, get_balance(uid), "session_user_mismatch"
+            if int(row["claimed"]):
+                conn.rollback()
+                bal = get_balance(uid)
+                return False, bal, "already_claimed"
+            if not int(row["will_win"]):
+                conn.rollback()
+                return False, get_balance(uid), "not_a_win"
+            prize = int(row["prize"] or WIN_PRIZE)
+            if prize <= 0:
+                conn.rollback()
+                return False, get_balance(uid), "no_prize"
+
+            # начисление
+            bal_row = conn.execute(
+                "SELECT stars FROM balances WHERE user_id = ?", (uid,)
+            ).fetchone()
+            current = int(bal_row["stars"]) if bal_row else 0
+            new_bal = current + prize
+            now = time.time()
+            if bal_row:
+                conn.execute(
+                    "UPDATE balances SET stars = ?, updated_at = ? WHERE user_id = ?",
+                    (new_bal, now, uid),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO balances (user_id, stars, updated_at) VALUES (?, ?, ?)",
+                    (uid, new_bal, now),
+                )
+            conn.execute(
+                "INSERT INTO ledger (user_id, delta, reason, payload, created_at) VALUES (?, ?, ?, ?, ?)",
+                (uid, prize, "win_claim", sid, now),
+            )
+            conn.execute(
+                "UPDATE sessions SET claimed = 1 WHERE id = ?",
+                (sid,),
+            )
+            conn.commit()
+            return True, new_bal, "ok"
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             conn.close()
 
@@ -318,6 +430,7 @@ class Handler(SimpleHTTPRequestHandler):
                 {
                     "stars": GAME_COST,
                     "gameCost": GAME_COST,
+                    "winPrize": WIN_PRIZE,
                     "packages": list(TOPUP_PACKAGES),
                 },
             )
@@ -341,6 +454,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._handle_me(body)
         if parsed.path == "/api/play":
             return self._handle_play(body)
+        if parsed.path == "/api/claim":
+            return self._handle_claim(body)
         if parsed.path == "/api/create-invoice":
             return self._handle_invoice(body)
         if parsed.path == "/api/balance":
@@ -375,6 +490,8 @@ class Handler(SimpleHTTPRequestHandler):
             "webapp_url": WEBAPP_URL or None,
             "bot_token_set": has_token,
             "game_cost": GAME_COST,
+            "win_prize": WIN_PRIZE,
+            "win_rate": WIN_RATE,
             "last_external_ping_sec_ago": age,
             "ping_url": "/api/ping",
             "setup_url": "/keepalive-setup",
@@ -433,22 +550,27 @@ class Handler(SimpleHTTPRequestHandler):
                 "userId": uid,
                 "balance": balance,
                 "gameCost": GAME_COST,
+                "winPrize": WIN_PRIZE,
                 "packages": list(TOPUP_PACKAGES),
                 "stars": GAME_COST,
             },
         )
 
     def _handle_play(self, body: dict):
-        """Списать GAME_COST и разрешить раунд."""
+        """Списать GAME_COST, создать сессию (will_win), разрешить раунд."""
         user, verified, uname, uid = self._resolve_user(body)
         admin = is_admin_user(user) if verified else False
         soft = bool(
             (body.get("username") or "").strip().lstrip("@").lower() in ADMIN_USERNAMES
         )
         is_admin = admin or (soft and not verified)
+        will_win = random.random() < WIN_RATE
 
         if is_admin:
             bal = get_balance(int(uid)) if uid else 0
+            sid = ""
+            if uid is not None:
+                sid = create_session(int(uid), will_win, WIN_PRIZE, free=True)
             self._json(
                 200,
                 {
@@ -456,7 +578,10 @@ class Handler(SimpleHTTPRequestHandler):
                     "free": True,
                     "balance": bal,
                     "gameCost": GAME_COST,
+                    "winPrize": WIN_PRIZE,
                     "isAdmin": True,
+                    "sessionId": sid,
+                    "willWin": will_win,
                 },
             )
             return
@@ -486,7 +611,14 @@ class Handler(SimpleHTTPRequestHandler):
             )
             return
 
-        log.info("play user=%s bal_after=%s", uid, bal)
+        sid = create_session(int(uid), will_win, WIN_PRIZE, free=False)
+        log.info(
+            "play user=%s bal_after=%s win=%s session=%s",
+            uid,
+            bal,
+            will_win,
+            sid[:8],
+        )
         self._json(
             200,
             {
@@ -494,7 +626,76 @@ class Handler(SimpleHTTPRequestHandler):
                 "free": False,
                 "balance": bal,
                 "gameCost": GAME_COST,
+                "winPrize": WIN_PRIZE,
                 "spent": GAME_COST,
+                "sessionId": sid,
+                "willWin": will_win,
+            },
+        )
+
+    def _handle_claim(self, body: dict):
+        """Вывести приз выигрышной сессии на баланс ⭐."""
+        user, verified, uname, uid = self._resolve_user(body)
+        admin = is_admin_user(user) if verified else False
+        soft = bool(
+            (body.get("username") or "").strip().lstrip("@").lower() in ADMIN_USERNAMES
+        )
+        is_admin = admin or (soft and not verified)
+
+        session_id = (body.get("sessionId") or body.get("session_id") or "").strip()
+
+        if not verified and not is_admin:
+            self._json(
+                401,
+                {
+                    "ok": False,
+                    "error": "open_in_telegram",
+                    "message": "Откройте игру через Telegram-бота.",
+                },
+            )
+            return
+
+        if uid is None:
+            self._json(
+                400,
+                {"ok": False, "error": "no_user", "message": "Нет user id"},
+            )
+            return
+
+        try:
+            ok, bal, msg = claim_win(session_id, int(uid))
+        except Exception as e:
+            log.exception("claim failed")
+            self._json(500, {"ok": False, "error": str(e)})
+            return
+
+        if not ok:
+            self._json(
+                400,
+                {
+                    "ok": False,
+                    "error": msg,
+                    "balance": bal,
+                    "message": {
+                        "already_claimed": "Приз уже выведен",
+                        "not_a_win": "В этой игре нет выигрыша",
+                        "session_not_found": "Сессия не найдена",
+                        "session_user_mismatch": "Чужая сессия",
+                        "no_session": "Нет sessionId",
+                        "no_prize": "Приз 0",
+                    }.get(msg, msg),
+                },
+            )
+            return
+
+        log.info("claim user=%s prize session=%s bal=%s", uid, session_id[:8], bal)
+        self._json(
+            200,
+            {
+                "ok": True,
+                "balance": bal,
+                "prize": WIN_PRIZE,
+                "message": f"+{WIN_PRIZE} ⭐ на баланс",
             },
         )
 
@@ -588,7 +789,13 @@ def start_http():
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     log.info("HTTP http://0.0.0.0:%s  (игра + API + /api/ping)", PORT)
     log.info("Админы (free play): %s", ", ".join(sorted(ADMIN_USERNAMES)) or "(нет)")
-    log.info("Игра = %s ⭐ | пакеты: %s", GAME_COST, TOPUP_PACKAGES)
+    log.info(
+        "Игра = %s ⭐ | приз = %s ⭐ | win_rate=%.2f | пакеты: %s",
+        GAME_COST,
+        WIN_PRIZE,
+        WIN_RATE,
+        TOPUP_PACKAGES,
+    )
     server.serve_forever()
 
 

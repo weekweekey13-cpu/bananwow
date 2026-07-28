@@ -712,6 +712,23 @@
     </div>
   </div>
 
+  <!-- Выигрыш + вывод на баланс -->
+  <div class="overlay center" id="winOverlay" role="dialog" aria-modal="true">
+    <div class="sheet">
+      <div class="lose-emoji">🎉</div>
+      <h2>Победа!</h2>
+      <p class="lead" id="winLead">Три одинаковых! Забери приз на баланс.</p>
+      <div class="pill-row"><span class="cost-pill" id="winPrizePill">⭐ +100</span></div>
+      <button type="button" class="btn btn-pulse" id="claimBtn">Вывести · 100 ⭐</button>
+      <div id="winAfterClaim" class="hidden" style="margin-top:10px;width:100%">
+        <p class="hint-line ok" id="claimOk" style="margin-bottom:10px">Приз на балансе!</p>
+        <button type="button" class="btn" id="winRetryBtn">Сыграть ещё · 10 ⭐</button>
+        <button type="button" class="btn btn-ghost" id="winClose" style="margin-top:8px">На главный</button>
+      </div>
+      <p class="err" id="claimErr"></p>
+    </div>
+  </div>
+
   <script>
     (function () {
       const ICON_V = "20260726d";
@@ -733,6 +750,7 @@
 
       const MAX_ATTEMPTS = 3;
       let GAME_COST = 10;
+      let WIN_PRIZE = 100;
       let PACKAGES = [10, 30, 50, 100, 250];
       const ADMIN_USERNAMES = ["bonamartin69"];
 
@@ -755,6 +773,15 @@
       const retryErr = document.getElementById("retryErr");
       const loseCostPill = document.getElementById("loseCostPill");
       const playArea = document.getElementById("playArea");
+      const winOverlay = document.getElementById("winOverlay");
+      const claimBtn = document.getElementById("claimBtn");
+      const claimErr = document.getElementById("claimErr");
+      const claimOk = document.getElementById("claimOk");
+      const winAfterClaim = document.getElementById("winAfterClaim");
+      const winRetryBtn = document.getElementById("winRetryBtn");
+      const winClose = document.getElementById("winClose");
+      const winPrizePill = document.getElementById("winPrizePill");
+      const winLead = document.getElementById("winLead");
 
       let deck = [];
       let attemptsLeft = MAX_ATTEMPTS;
@@ -763,12 +790,14 @@
       let balance = 0;
       let isAdmin = false;
       let loading = false;
-      /** Фрукт «пары» в этом раунде (первые 2 открытия = он, 3-е ≠ он) */
+      /** Фрукт «пары» в этом раунде */
       let matchFruit = null;
-      /** Сколько карт уже открыто в раунде (0..3) */
       let openCount = 0;
-      /** Индексы открытых карт по порядку */
       let openedOrder = [];
+      /** Сессия сервера: выигрыш / claim */
+      let sessionId = "";
+      let willWin = false;
+      let prizeClaimed = false;
 
       const tg = window.Telegram && window.Telegram.WebApp;
 
@@ -1039,7 +1068,15 @@
         refreshPlayUi();
       }
 
-      function startRound() {
+      function startRound(opts) {
+        opts = opts || {};
+        if (typeof opts.sessionId === "string") sessionId = opts.sessionId;
+        if (typeof opts.willWin === "boolean") willWin = opts.willWin;
+        if (typeof opts.winPrize === "number" && opts.winPrize > 0) {
+          WIN_PRIZE = opts.winPrize;
+        }
+        prizeClaimed = false;
+
         attemptsLeft = MAX_ATTEMPTS;
         attemptsEl.textContent = String(attemptsLeft);
         locked = false;
@@ -1050,6 +1087,13 @@
         renderBoard();
         boardEl.classList.remove("locked", "preview");
         loseOverlay.classList.remove("show");
+        winOverlay.classList.remove("show");
+        claimBtn.classList.remove("hidden");
+        claimBtn.disabled = false;
+        claimBtn.textContent = "Вывести · " + WIN_PRIZE + " ⭐";
+        winAfterClaim.classList.add("hidden");
+        claimErr.textContent = "";
+        winPrizePill.textContent = "⭐ +" + WIN_PRIZE;
         closeTopup();
         refreshPlayUi();
         try {
@@ -1061,9 +1105,11 @@
         if (locked || !inRound || attemptsLeft <= 0) return;
         if (btn.classList.contains("flipped")) return;
 
-        // 1-я и 2-я — всегда match, 3-я — всегда другой
+        // 1-я и 2-я — всегда match; 3-я — match при выигрыше, иначе другой
         const step = openCount;
         if (step < 2) {
+          ensureFruitAt(index, matchFruit);
+        } else if (willWin) {
           ensureFruitAt(index, matchFruit);
         } else {
           ensureFruitAt(index, pickOtherFruit());
@@ -1072,7 +1118,7 @@
         btn.classList.add("flipped");
         btn.disabled = true;
         btn.setAttribute("aria-label", deck[index].label);
-        if (step < 2) btn.classList.add("match-ok");
+        if (step < 2 || willWin) btn.classList.add("match-ok");
         else btn.classList.add("mismatch");
 
         openCount += 1;
@@ -1086,7 +1132,8 @@
 
         if (attemptsLeft === 0) {
           locked = true;
-          setTimeout(finishLose, 750);
+          if (willWin) setTimeout(finishWin, 700);
+          else setTimeout(finishLose, 750);
         }
       }
 
@@ -1180,6 +1227,126 @@
         }, 600);
       }
 
+      function finishWin() {
+        const cards = Array.from(boardEl.querySelectorAll(".card"));
+        // Все три открытые — зелёные
+        openedOrder.forEach((i) => {
+          const c = cardEl(i);
+          if (c) {
+            c.classList.remove("mismatch");
+            c.classList.add("match-ok");
+          }
+        });
+        // Остальные приглушить
+        cards.forEach((c) => {
+          const i = Number(c.dataset.index);
+          if (openedOrder.indexOf(i) === -1) c.classList.add("dim");
+        });
+
+        if (winLead && matchFruit) {
+          winLead.textContent =
+            "Три «" + matchFruit.label + "»! Выведи " + WIN_PRIZE + " ⭐ на баланс.";
+        }
+        winPrizePill.textContent = "⭐ +" + WIN_PRIZE;
+        claimBtn.textContent = "Вывести · " + WIN_PRIZE + " ⭐";
+        claimBtn.classList.remove("hidden");
+        claimBtn.disabled = false;
+        winAfterClaim.classList.add("hidden");
+        claimErr.textContent = "";
+        prizeClaimed = false;
+
+        setTimeout(() => {
+          // открыть остальные тускло
+          cards.forEach((c) => {
+            if (!c.classList.contains("flipped")) {
+              c.classList.add("flipped", "dim");
+              c.disabled = true;
+              const i = Number(c.dataset.index);
+              c.setAttribute("aria-label", deck[i].label);
+            }
+          });
+          inRound = false;
+          locked = true;
+          boardEl.classList.add("locked");
+          refreshPlayUi();
+          setTimeout(() => {
+            winOverlay.classList.add("show");
+            try {
+              if (tg && tg.HapticFeedback) {
+                tg.HapticFeedback.notificationOccurred("success");
+              }
+            } catch (_) {}
+          }, 350);
+        }, 900);
+      }
+
+      async function claimPrize() {
+        if (prizeClaimed || loading) return;
+        claimErr.textContent = "";
+        loading = true;
+        claimBtn.disabled = true;
+
+        try {
+          // Демо без сервера
+          if (!inTelegram && /[?&#]demo=1(?:&|$)/.test(location.href)) {
+            setBalance(balance + WIN_PRIZE, true);
+            prizeClaimed = true;
+            onClaimSuccess(balance);
+            return;
+          }
+
+          if (!sessionId) {
+            // Админ / сбой сессии — начислим только если есть session
+            claimErr.textContent = "Сессия игры не найдена. Сыграй ещё раз.";
+            claimBtn.disabled = false;
+            return;
+          }
+
+          const { res, data } = await apiPost(
+            "/api/claim",
+            authBody({ sessionId: sessionId })
+          );
+
+          if (data.ok) {
+            prizeClaimed = true;
+            if (typeof data.balance === "number") setBalance(data.balance, true);
+            else setBalance(balance + WIN_PRIZE, true);
+            onClaimSuccess(data.balance);
+            return;
+          }
+
+          if (data.error === "already_claimed") {
+            prizeClaimed = true;
+            if (typeof data.balance === "number") setBalance(data.balance, true);
+            onClaimSuccess(data.balance);
+            claimOk.textContent = "Приз уже был выведен";
+            return;
+          }
+
+          throw new Error(data.message || data.error || "Не удалось вывести");
+        } catch (e) {
+          console.error(e);
+          claimErr.textContent = e.message || "Ошибка вывода";
+          claimBtn.disabled = false;
+        } finally {
+          loading = false;
+        }
+      }
+
+      function onClaimSuccess(bal) {
+        claimBtn.classList.add("hidden");
+        winAfterClaim.classList.remove("hidden");
+        claimOk.textContent =
+          "+" + WIN_PRIZE + " ⭐ на балансе" +
+          (typeof bal === "number" ? " · всего " + bal : "") +
+          " 🎉";
+        hintLine.textContent = "Приз выведен на баланс";
+        hintLine.className = "hint-line ok";
+        try {
+          if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+        } catch (_) {}
+      }
+
       async function apiPost(path, body) {
         const endpoint = new URL(path, window.location.origin).href;
         const res = await fetch(endpoint, {
@@ -1211,6 +1378,7 @@
         try {
           const { data } = await apiPost("/api/me", authBody());
           if (data.gameCost) GAME_COST = data.gameCost;
+          if (data.winPrize) WIN_PRIZE = data.winPrize;
           if (Array.isArray(data.packages) && data.packages.length) {
             PACKAGES = data.packages;
             renderPackages();
@@ -1218,6 +1386,8 @@
           if (data.isAdmin) isAdmin = true;
           if (typeof data.balance === "number") setBalance(data.balance, false);
           else refreshPlayUi();
+          claimBtn.textContent = "Вывести · " + WIN_PRIZE + " ⭐";
+          winPrizePill.textContent = "⭐ +" + WIN_PRIZE;
         } catch (e) {
           console.warn("refreshMe", e);
           if (isAdmin) setBalance(0, false);
@@ -1233,17 +1403,34 @@
         loading = true;
         playBtn.disabled = true;
         retryBtn.disabled = true;
+        winRetryBtn.disabled = true;
         if (errEl) errEl.textContent = "";
 
         try {
-          // Админ — сразу
+          // Админ
           if (isAdmin || isLocalAdmin()) {
             isAdmin = true;
-            startRound();
+            // всё равно спросим сервер, чтобы получить session/willWin
+            try {
+              const { data } = await apiPost("/api/play", authBody());
+              if (data && data.ok) {
+                startRound({
+                  sessionId: data.sessionId || "",
+                  willWin: !!data.willWin,
+                  winPrize: data.winPrize || WIN_PRIZE,
+                });
+                if (typeof data.balance === "number") setBalance(data.balance, false);
+                return true;
+              }
+            } catch (_) {}
+            startRound({
+              sessionId: "",
+              willWin: Math.random() < 0.12,
+              winPrize: WIN_PRIZE,
+            });
             return true;
           }
 
-          // Не хватает — открыть пополнение
           if (balance < GAME_COST) {
             openTopup();
             hintLine.textContent = "Выбери пакет и пополни баланс";
@@ -1251,11 +1438,15 @@
             return false;
           }
 
-          // Демо в браузере без Telegram
+          // Демо в браузере
           if (!inTelegram) {
             if (/[?&#]demo=1(?:&|$)/.test(location.href)) {
               setBalance(balance - GAME_COST, true);
-              startRound();
+              startRound({
+                sessionId: "demo",
+                willWin: Math.random() < 0.25,
+                winPrize: WIN_PRIZE,
+              });
               return true;
             }
             if (errEl) errEl.textContent = "Открой игру через Telegram-бота.";
@@ -1267,13 +1458,15 @@
           const { res, data } = await apiPost("/api/play", authBody());
           if (data.isAdmin) {
             isAdmin = true;
-            startRound();
-            return true;
           }
           if (data.ok) {
             if (typeof data.balance === "number") setBalance(data.balance, true);
             else setBalance(balance - GAME_COST, true);
-            startRound();
+            startRound({
+              sessionId: data.sessionId || "",
+              willWin: !!data.willWin,
+              winPrize: data.winPrize || WIN_PRIZE,
+            });
             return true;
           }
           if (data.error === "insufficient" || res.status === 402) {
@@ -1295,6 +1488,7 @@
           loading = false;
           playBtn.disabled = false;
           retryBtn.disabled = false;
+          winRetryBtn.disabled = false;
           refreshPlayUi();
         }
       }
@@ -1408,6 +1602,25 @@
 
       loseClose.addEventListener("click", () => {
         loseOverlay.classList.remove("show");
+        prepareLobbyBoard();
+      });
+
+      claimBtn.addEventListener("click", () => {
+        claimPrize();
+      });
+
+      winRetryBtn.addEventListener("click", async () => {
+        if (!isAdmin && balance < GAME_COST) {
+          winOverlay.classList.remove("show");
+          openTopup();
+          return;
+        }
+        const ok = await startPlayFromBalance(claimErr);
+        if (ok) winOverlay.classList.remove("show");
+      });
+
+      winClose.addEventListener("click", () => {
+        winOverlay.classList.remove("show");
         prepareLobbyBoard();
       });
 
