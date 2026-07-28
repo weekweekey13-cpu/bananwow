@@ -351,7 +351,8 @@
     .btn-ghost::after { display: none; }
 
     .btn-pulse {
-      animation: pulse-glow 2s ease-in-out infinite;
+      /* без бесконечной анимации — меньше лагов в Telegram WebView */
+      box-shadow: 0 8px 24px rgba(201, 162, 39, 0.4);
     }
 
     .hint-line {
@@ -474,7 +475,7 @@
     }
 
     .topup-btn.attention {
-      animation: pulse-glow 1.6s ease-in-out infinite;
+      box-shadow: 0 4px 20px rgba(201, 162, 39, 0.55);
     }
 
     .free-badge {
@@ -1021,28 +1022,31 @@
         }
         if (animate && balance !== prev) {
           balanceValue.classList.remove("bump");
-          void balanceValue.offsetWidth;
-          balanceValue.classList.add("bump");
+          // без forced reflow — плавнее на WebView
+          requestAnimationFrame(function () {
+            balanceValue.classList.add("bump");
+          });
         }
-        refreshPlayUi();
+        // полный UI только если сменился «порог» вывода / хватает ставки
+        if (prev !== balance) {
+          schedulePlayUi();
+        }
       }
 
       function previewPrize() {
         return freePlayAvailable ? FREE_FIRST_PRIZE : currentStake * WIN_MULTIPLIER;
       }
 
-      function setStake(n, fromUi) {
-        let v = Math.round(Number(n) || STAKE_MIN);
-        // шаг 10
-        v = Math.round(v / 10) * 10;
-        v = Math.max(STAKE_MIN, Math.min(STAKE_MAX, v));
-        currentStake = v;
-        if (stakeRange) {
-          stakeRange.min = String(STAKE_MIN);
-          stakeRange.max = String(STAKE_MAX);
-          stakeRange.step = "10";
-          if (!fromUi || stakeRange.value !== String(v)) stakeRange.value = String(v);
-        }
+      let playUiRaf = 0;
+      function schedulePlayUi() {
+        if (playUiRaf) return;
+        playUiRaf = requestAnimationFrame(function () {
+          playUiRaf = 0;
+          refreshPlayUi();
+        });
+      }
+
+      function updateStakeLabels(v) {
         if (stakeValueLabel) stakeValueLabel.textContent = v + " ⭐";
         if (costLabel) {
           costLabel.textContent = freePlayAvailable ? "free" : v + " ⭐";
@@ -1051,11 +1055,41 @@
           prizeLabel.textContent = previewPrize() + " ⭐";
         }
         if (stakePresets) {
-          stakePresets.querySelectorAll(".stake-preset").forEach((b) => {
-            b.classList.toggle("active", Number(b.dataset.stake) === v);
-          });
+          const kids = stakePresets.children;
+          for (let i = 0; i < kids.length; i++) {
+            const b = kids[i];
+            const on = Number(b.dataset.stake) === v;
+            if (on !== b.classList.contains("active")) {
+              b.classList.toggle("active", on);
+            }
+          }
         }
-        if (!inRound) refreshPlayUi();
+        // лёгкое обновление кнопки без всего refreshPlayUi
+        if (!inRound && playBtn && !freePlayAvailable && !isAdmin) {
+          if (balance >= v) {
+            playBtn.textContent =
+              "Играть · " + v + " ⭐ → " + previewPrize() + " ⭐";
+          } else {
+            playBtn.textContent = "Пополнить и играть";
+          }
+        }
+      }
+
+      function setStake(n, fromUi) {
+        let v = Math.round(Number(n) || STAKE_MIN);
+        // шаг 10
+        v = Math.round(v / 10) * 10;
+        v = Math.max(STAKE_MIN, Math.min(STAKE_MAX, v));
+        const changed = v !== currentStake;
+        currentStake = v;
+        if (stakeRange) {
+          if (stakeRange.min !== String(STAKE_MIN)) stakeRange.min = String(STAKE_MIN);
+          if (stakeRange.max !== String(STAKE_MAX)) stakeRange.max = String(STAKE_MAX);
+          if (stakeRange.value !== String(v)) stakeRange.value = String(v);
+        }
+        updateStakeLabels(v);
+        // при драге ползунка — только лейблы; полный UI в конце (change)
+        if (!fromUi && changed && !inRound) schedulePlayUi();
       }
 
       function renderStakePresets() {
@@ -1379,78 +1413,44 @@
         } catch (_) {}
       }
 
-      // ── Звук переворота карты (Web Audio, без файлов) ──
+      // ── Лёгкий звук карты (1 осциллятор, без noise-буфера — не лагает WebView) ──
       let audioCtx = null;
+      let audioReady = false;
 
-      function getAudioCtx() {
-        if (!audioCtx) {
-          const AC = window.AudioContext || window.webkitAudioContext;
-          if (!AC) return null;
-          audioCtx = new AC();
+      function ensureAudio() {
+        try {
+          if (!audioCtx) {
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return null;
+            audioCtx = new AC();
+          }
+          if (audioCtx.state === "suspended") {
+            audioCtx.resume();
+          }
+          audioReady = true;
+          return audioCtx;
+        } catch (_) {
+          return null;
         }
-        if (audioCtx.state === "suspended") {
-          audioCtx.resume().catch(function () {});
-        }
-        return audioCtx;
       }
 
-      /** Короткий «whoosh + soft chime» при открытии карты */
       function playCardFlipSound(step) {
         try {
-          const ctx = getAudioCtx();
-          if (!ctx) return;
+          const ctx = ensureAudio();
+          if (!ctx || ctx.state !== "running") return;
           const t0 = ctx.currentTime;
-          // чуть выше тон с каждым ходом
-          const base = 380 + (step || 0) * 90;
-
-          // noise whoosh (переворот)
-          const nLen = Math.floor(ctx.sampleRate * 0.08);
-          const buf = ctx.createBuffer(1, nLen, ctx.sampleRate);
-          const data = buf.getChannelData(0);
-          for (let i = 0; i < nLen; i++) {
-            data[i] = (Math.random() * 2 - 1) * (1 - i / nLen);
-          }
-          const noise = ctx.createBufferSource();
-          noise.buffer = buf;
-          const nFilter = ctx.createBiquadFilter();
-          nFilter.type = "bandpass";
-          nFilter.frequency.value = 1200;
-          nFilter.Q.value = 0.7;
-          const nGain = ctx.createGain();
-          nGain.gain.setValueAtTime(0.0001, t0);
-          nGain.gain.exponentialRampToValueAtTime(0.22, t0 + 0.01);
-          nGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.09);
-          noise.connect(nFilter);
-          nFilter.connect(nGain);
-          nGain.connect(ctx.destination);
-          noise.start(t0);
-          noise.stop(t0 + 0.1);
-
-          // soft sparkle
+          const base = 420 + (step || 0) * 70;
           const osc = ctx.createOscillator();
-          const osc2 = ctx.createOscillator();
-          osc.type = "sine";
-          osc2.type = "triangle";
-          osc.frequency.setValueAtTime(base, t0);
-          osc.frequency.exponentialRampToValueAtTime(base * 1.6, t0 + 0.12);
-          osc2.frequency.setValueAtTime(base * 1.5, t0);
-          osc2.frequency.exponentialRampToValueAtTime(base * 2.2, t0 + 0.1);
           const g = ctx.createGain();
-          g.gain.setValueAtTime(0.0001, t0);
-          g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.015);
-          g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
-          const g2 = ctx.createGain();
-          g2.gain.setValueAtTime(0.0001, t0);
-          g2.gain.exponentialRampToValueAtTime(0.07, t0 + 0.02);
-          g2.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.14);
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(base, t0);
+          osc.frequency.exponentialRampToValueAtTime(base * 1.45, t0 + 0.07);
+          g.gain.setValueAtTime(0.12, t0);
+          g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.09);
           osc.connect(g);
-          osc2.connect(g2);
           g.connect(ctx.destination);
-          g2.connect(ctx.destination);
           osc.start(t0);
-          osc2.start(t0 + 0.01);
-          osc.stop(t0 + 0.2);
-          osc2.stop(t0 + 0.16);
+          osc.stop(t0 + 0.1);
         } catch (_) {}
       }
 
@@ -1468,8 +1468,7 @@
           ensureFruitAt(index, pickOtherFruit());
         }
 
-        playCardFlipSound(step);
-
+        // сначала анимация UI, звук следом (не блокирует клик)
         btn.classList.add("flipped");
         btn.disabled = true;
         btn.setAttribute("aria-label", deck[index].label);
@@ -1481,9 +1480,13 @@
         attemptsLeft -= 1;
         attemptsEl.textContent = String(attemptsLeft);
 
-        try {
-          if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
-        } catch (_) {}
+        // звук + haptic асинхронно
+        requestAnimationFrame(function () {
+          playCardFlipSound(step);
+          try {
+            if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
+          } catch (_) {}
+        });
 
         if (attemptsLeft === 0) {
           locked = true;
@@ -2046,11 +2049,25 @@
         return new Promise((r) => setTimeout(r, ms));
       }
 
-      // Stake UI
+      // Stake UI — input лёгкий, change = полный UI
       if (stakeRange) {
-        stakeRange.addEventListener("input", () => setStake(stakeRange.value, true));
-        stakeRange.addEventListener("change", () => setStake(stakeRange.value, true));
+        stakeRange.addEventListener("input", function () {
+          setStake(stakeRange.value, true);
+        });
+        stakeRange.addEventListener("change", function () {
+          setStake(stakeRange.value, false);
+          schedulePlayUi();
+        });
       }
+
+      // Прогрев AudioContext по первому тапу (иначе iOS/Telegram режет звук + лаг)
+      document.addEventListener(
+        "pointerdown",
+        function () {
+          ensureAudio();
+        },
+        { once: true, passive: true }
+      );
 
       // Events
       playBtn.addEventListener("click", async () => {
@@ -2118,10 +2135,12 @@
       setBalance(0, false);
       refreshMe();
 
-      // Периодически подтягиваем баланс (после оплаты в другом окне)
-      setInterval(() => {
-        if (!inRound && !loading) refreshMe();
-      }, 12000);
+      // Редко подтягиваем баланс (не во время игры — меньше лагов)
+      setInterval(function () {
+        if (!inRound && !loading && document.visibilityState === "visible") {
+          refreshMe();
+        }
+      }, 20000);
     })();
   </script>
 </body>
