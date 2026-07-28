@@ -883,9 +883,6 @@
       <button type="button" class="btn btn-pulse" id="claimBtn">На баланс · 100 ⭐</button>
       <div id="winAfterClaim" class="hidden" style="margin-top:10px;width:100%">
         <p class="hint-line ok" id="claimOk" style="margin-bottom:10px">Приз на балансе!</p>
-        <p class="hint-line" id="claimTgHint" style="margin-bottom:10px">
-          В Telegram можно вывести от 110 ⭐
-        </p>
         <button type="button" class="btn" id="winRetryBtn">Сыграть ещё · 10 ⭐</button>
         <button type="button" class="btn btn-ghost" id="winClose" style="margin-top:8px">На главный</button>
       </div>
@@ -976,7 +973,6 @@
       const winPrizePill = document.getElementById("winPrizePill");
       const winLead = document.getElementById("winLead");
       const freeBadge = document.getElementById("freeBadge");
-      const claimTgHint = document.getElementById("claimTgHint");
       const tgWithdrawBtn = document.getElementById("tgWithdrawBtn");
       const tgWithdrawOverlay = document.getElementById("tgWithdrawOverlay");
       const tgWithdrawLead = document.getElementById("tgWithdrawLead");
@@ -1753,28 +1749,10 @@
       function onClaimSuccess(bal) {
         claimBtn.classList.add("hidden");
         winAfterClaim.classList.remove("hidden");
-        const total = typeof bal === "number" ? bal : balance;
         claimOk.textContent =
           "+" + WIN_PRIZE + " ⭐ на игровом балансе" +
           (typeof bal === "number" ? " · всего " + bal : "") +
           " 🎉";
-        if (claimTgHint) {
-          if (total >= TG_WITHDRAW_MIN) {
-            claimTgHint.textContent =
-              "Можно вывести · кнопка «Вывести» внизу (от " +
-              TG_WITHDRAW_MIN +
-              " ⭐)";
-            claimTgHint.className = "hint-line ok";
-          } else {
-            claimTgHint.textContent =
-              "Вывод от " +
-              TG_WITHDRAW_MIN +
-              " ⭐ · ещё " +
-              (TG_WITHDRAW_MIN - total) +
-              " ⭐ (пополни)";
-            claimTgHint.className = "hint-line warn";
-          }
-        }
         hintLine.textContent = "Приз на игровом балансе";
         hintLine.className = "hint-line ok";
         refreshPlayUi();
