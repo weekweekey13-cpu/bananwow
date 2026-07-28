@@ -57,24 +57,54 @@
     }
 
     /* ── Header ── */
-    .header {
-      width: 100%;
-      text-align: center;
-      padding-top: 4px;
+    /* ── Splash / стартовый экран ── */
+    .splash {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 18px calc(24px + env(safe-area-inset-bottom, 0px));
+      background:
+        radial-gradient(ellipse 100% 70% at 50% 20%, #2a2414 0%, transparent 55%),
+        rgba(7, 7, 10, 0.96);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      opacity: 1;
+      transition: opacity 0.35s ease, visibility 0.35s ease;
     }
 
-    .brand {
-      font-size: 0.72rem;
+    .splash.hide {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .splash-card {
+      width: 100%;
+      max-width: 340px;
+      text-align: center;
+      padding: 36px 24px 28px;
+      border-radius: 24px;
+      background: linear-gradient(165deg, #22222e 0%, #121218 100%);
+      border: 1px solid rgba(201, 162, 39, 0.4);
+      box-shadow:
+        0 24px 56px rgba(0, 0, 0, 0.55),
+        0 0 40px rgba(201, 162, 39, 0.08);
+    }
+
+    .splash .brand {
+      font-size: 0.78rem;
       font-weight: 700;
-      letter-spacing: 0.22em;
+      letter-spacing: 0.28em;
       text-transform: uppercase;
       color: var(--gold-mid);
-      opacity: 0.9;
-      margin-bottom: 6px;
+      margin-bottom: 14px;
     }
 
-    h1 {
-      font-size: clamp(1.2rem, 5vw, 1.45rem);
+    .splash h1 {
+      font-size: clamp(1.35rem, 6vw, 1.65rem);
       font-weight: 700;
       letter-spacing: 0.01em;
       line-height: 1.3;
@@ -82,18 +112,24 @@
       -webkit-background-clip: text;
       background-clip: text;
       -webkit-text-fill-color: transparent;
+      margin-bottom: 10px;
     }
 
-    .subtitle {
-      margin-top: 6px;
-      font-size: 0.86rem;
+    .splash .subtitle {
+      font-size: 0.95rem;
       color: var(--muted);
-      line-height: 1.4;
+      line-height: 1.45;
+      margin-bottom: 28px;
     }
 
-    .subtitle strong {
+    .splash .subtitle strong {
       color: var(--gold);
       font-weight: 700;
+    }
+
+    .splash .btn {
+      max-width: 220px;
+      margin: 0 auto;
     }
 
     /* ── Status chips ── */
@@ -753,13 +789,17 @@
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header class="header">
+  <!-- Стартовый экран -->
+  <div class="splash" id="splash" role="dialog" aria-modal="true" aria-label="Добро пожаловать">
+    <div class="splash-card">
       <div class="brand">BANANAWOW</div>
       <h1>Найди 3 одинаковых</h1>
       <p class="subtitle">3 хода · выигрыш <strong>×10</strong></p>
-    </header>
+      <button type="button" class="btn btn-pulse" id="splashStartBtn">Старт</button>
+    </div>
+  </div>
 
+  <div class="wrap">
     <div class="chips">
       <div class="chip" id="attemptsChip">Ходы: <strong id="attempts">3</strong></div>
       <div class="chip" id="costChip">Ставка: <strong id="costLabel">10 ⭐</strong></div>
@@ -2215,6 +2255,21 @@
       topupOverlay.addEventListener("click", (e) => {
         if (e.target === topupOverlay) closeTopup();
       });
+
+      // Splash → Старт
+      const splash = document.getElementById("splash");
+      const splashStartBtn = document.getElementById("splashStartBtn");
+      if (splashStartBtn) {
+        splashStartBtn.addEventListener("click", function () {
+          if (splash) splash.classList.add("hide");
+          try {
+            ensureAudio();
+          } catch (_) {}
+          try {
+            if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
+          } catch (_) {}
+        });
+      }
 
       // Init
       renderStakePresets();
