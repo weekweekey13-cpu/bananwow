@@ -2,17 +2,22 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Find 3 identical fruits — Win 100 stars</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>BANANAWOW — найди 3 фрукта</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     :root {
-      --bg0: #0a0a0c;
-      --gold: #c9a227;
-      --gold-dim: rgba(201, 162, 39, 0.45);
-      --text: #f2f0ea;
+      --bg0: #07070a;
+      --bg1: #12121a;
+      --gold: #e0c05a;
+      --gold-mid: #c9a227;
+      --gold-dim: rgba(201, 162, 39, 0.4);
+      --text: #f4f1e8;
       --muted: #9a968c;
-      --lose: #e8e4dc;
+      --danger: #e07070;
+      --ok: #6dcea0;
+      --bar-h: 72px;
+      --safe-b: env(safe-area-inset-bottom, 0px);
     }
 
     * {
@@ -27,7 +32,10 @@
       height: 100%;
       font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
       color: var(--text);
-      background: radial-gradient(ellipse 120% 80% at 50% -10%, #1c1c28 0%, var(--bg0) 55%);
+      background:
+        radial-gradient(ellipse 100% 60% at 50% -5%, #2a2414 0%, transparent 55%),
+        radial-gradient(ellipse 80% 50% at 50% 100%, #1a1420 0%, transparent 50%),
+        var(--bg0);
       overflow-x: hidden;
     }
 
@@ -35,7 +43,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 20px 16px 32px;
+      padding: 12px 14px calc(var(--bar-h) + var(--safe-b) + 16px);
     }
 
     .wrap {
@@ -44,54 +52,115 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 18px;
+      gap: 14px;
+      flex: 1;
+    }
+
+    /* ── Header ── */
+    .header {
+      width: 100%;
+      text-align: center;
+      padding-top: 4px;
+    }
+
+    .brand {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--gold-mid);
+      opacity: 0.9;
+      margin-bottom: 6px;
     }
 
     h1 {
-      font-size: clamp(1.15rem, 4.6vw, 1.4rem);
-      font-weight: 600;
-      letter-spacing: 0.02em;
-      text-align: center;
-      line-height: 1.35;
+      font-size: clamp(1.2rem, 5vw, 1.45rem);
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      line-height: 1.3;
       background: linear-gradient(180deg, #fff8e7 0%, #d4b84a 100%);
       -webkit-background-clip: text;
       background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
-    h1 .win-line {
-      display: block;
-      margin-top: 0.2em;
-      font-size: 0.92em;
+    .subtitle {
+      margin-top: 6px;
+      font-size: 0.86rem;
+      color: var(--muted);
+      line-height: 1.4;
     }
 
-    .attempts {
-      display: none;
-    }
-
-    .attempts strong {
+    .subtitle strong {
       color: var(--gold);
+      font-weight: 700;
+    }
+
+    /* ── Status chips ── */
+    .chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 0.82rem;
       font-weight: 600;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(201, 162, 39, 0.22);
+      color: var(--muted);
       font-variant-numeric: tabular-nums;
+    }
+
+    .chip strong {
+      color: var(--gold);
+    }
+
+    .chip.live {
+      border-color: rgba(109, 206, 160, 0.4);
+      color: var(--ok);
+    }
+
+    .chip.live strong {
+      color: var(--ok);
+    }
+
+    /* ── Board ── */
+    .board-shell {
+      width: 100%;
+      position: relative;
+      border-radius: 22px;
+      padding: 14px;
+      background: linear-gradient(165deg, rgba(30, 30, 40, 0.9) 0%, rgba(12, 12, 16, 0.95) 100%);
+      border: 1px solid rgba(201, 162, 39, 0.22);
+      box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.4),
+        0 20px 40px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
 
     .board {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
+      gap: 10px;
       width: 100%;
     }
 
     .board.locked {
       pointer-events: none;
-      opacity: 0.45;
     }
 
-    /*
-      Flip без backface-visibility / preserve-3d —
-      Telegram WebView их часто ломает (пропадает и рубашка, и фрукт).
-      Две стороны поверх друг друга + scaleX / opacity.
-    */
+    .board.preview .card {
+      filter: brightness(0.85);
+    }
+
     .card {
       position: relative;
       width: 100%;
@@ -101,8 +170,8 @@
       background: transparent;
       padding: 0;
       margin: 0;
-      border-radius: 16px;
-      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.45);
+      border-radius: 14px;
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
       -webkit-appearance: none;
       appearance: none;
       overflow: visible;
@@ -113,13 +182,13 @@
     .card-inner {
       position: absolute;
       inset: 0;
-      border-radius: 16px;
+      border-radius: 14px;
     }
 
     .face {
       position: absolute;
       inset: 0;
-      border-radius: 16px;
+      border-radius: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -133,23 +202,22 @@
       z-index: 2;
       opacity: 1;
       transform: scaleX(1);
-      background: linear-gradient(145deg, #22222e 0%, #14141c 55%, #1a1a24 100%);
+      background: linear-gradient(145deg, #2a2a38 0%, #16161e 55%, #1c1c28 100%);
       border: 1.5px solid var(--gold-dim);
       box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.06),
-        inset 0 0 24px rgba(201, 162, 39, 0.06);
+        inset 0 1px 0 rgba(255, 255, 255, 0.07),
+        inset 0 0 22px rgba(201, 162, 39, 0.07);
     }
 
     .face-front {
       z-index: 1;
       opacity: 0;
       transform: scaleX(0);
-      background: linear-gradient(160deg, #2a2a36 0%, #18181f 100%);
+      background: linear-gradient(160deg, #2e2e3a 0%, #1a1a22 100%);
       border: 1.5px solid rgba(201, 162, 39, 0.35);
       pointer-events: none;
     }
 
-    /* Переворот: рубашка сжимается, затем фрукт раскрывается */
     .card.flipped .face-back {
       z-index: 1;
       opacity: 0;
@@ -179,8 +247,7 @@
       transition: opacity 0.5s ease;
     }
 
-    .fruit-img,
-    .back-img {
+    .fruit-img, .back-img {
       width: 78%;
       height: 78%;
       object-fit: contain;
@@ -195,69 +262,13 @@
       height: 56%;
     }
 
-    .overlay {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(5, 5, 8, 0.72);
-      backdrop-filter: blur(6px);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.45s ease;
-      z-index: 20;
-      padding: 24px;
-    }
-
-    .overlay.show {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .modal {
+    /* ── Play CTA ── */
+    .play-area {
       width: 100%;
-      max-width: 320px;
-      text-align: center;
-      padding: 32px 24px 28px;
-      border-radius: 20px;
-      background: linear-gradient(165deg, #1e1e28 0%, #121218 100%);
-      border: 1px solid rgba(201, 162, 39, 0.35);
-      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55);
-      transform: translateY(12px) scale(0.96);
-      transition: transform 0.45s cubic-bezier(0.34, 1.2, 0.64, 1);
-    }
-
-    .overlay.show .modal {
-      transform: translateY(0) scale(1);
-    }
-
-    .modal h2 {
-      font-size: 1.55rem;
-      font-weight: 500;
-      letter-spacing: 0.06em;
-      color: var(--lose);
-      margin-bottom: 10px;
-    }
-
-    .modal p {
-      color: var(--muted);
-      font-size: 0.92rem;
-      margin-bottom: 22px;
-      line-height: 1.45;
-    }
-
-    .price-tag {
-      display: inline-flex;
+      display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 6px;
-      margin-bottom: 18px;
-      padding: 8px 14px;
-      border-radius: 999px;
-      font-size: 0.9rem;
-      color: #1a1408;
-      font-weight: 700;
-      background: linear-gradient(180deg, #e8d48a 0%, #c9a227 100%);
+      gap: 8px;
     }
 
     .btn {
@@ -265,16 +276,29 @@
       border: none;
       cursor: pointer;
       font: inherit;
-      font-size: 0.95rem;
-      font-weight: 600;
+      font-size: 1rem;
+      font-weight: 700;
       letter-spacing: 0.03em;
       color: #1a1408;
-      background: linear-gradient(180deg, #e8d48a 0%, #c9a227 55%, #a8861a 100%);
-      padding: 14px 28px;
-      border-radius: 12px;
-      box-shadow: 0 8px 20px rgba(201, 162, 39, 0.28);
+      background: linear-gradient(180deg, #f0d878 0%, #c9a227 55%, #a8861a 100%);
+      padding: 16px 24px;
+      border-radius: 16px;
+      box-shadow:
+        0 8px 24px rgba(201, 162, 39, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35);
       transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
       width: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.18) 50%, transparent 60%);
+      transform: translateX(-120%);
+      animation: shine 3.5s ease-in-out infinite;
     }
 
     .btn:disabled {
@@ -288,26 +312,280 @@
     }
 
     .btn-ghost {
-      margin-top: 10px;
       background: transparent;
       color: var(--muted);
       box-shadow: none;
       border: 1px solid rgba(154, 150, 140, 0.35);
-      font-weight: 500;
-      font-size: 0.85rem;
-      padding: 10px 16px;
+      font-weight: 600;
+      font-size: 0.88rem;
+      padding: 12px 16px;
     }
 
-    .err {
-      color: #e07070;
-      font-size: 0.82rem;
-      margin-top: 12px;
+    .btn-ghost::after { display: none; }
+
+    .btn-pulse {
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+
+    .hint-line {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-align: center;
       min-height: 1.2em;
     }
 
-    .hint,
-    .pay-badge {
-      display: none;
+    .hint-line.warn { color: var(--danger); }
+    .hint-line.ok { color: var(--ok); }
+
+    /* ── Bottom bar ── */
+    .bottom-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 30;
+      padding: 10px 14px calc(10px + var(--safe-b));
+      background: linear-gradient(180deg, rgba(10, 10, 14, 0) 0%, rgba(10, 10, 14, 0.92) 28%, #0c0c10 100%);
+      pointer-events: none;
+    }
+
+    .bottom-inner {
+      pointer-events: auto;
+      max-width: 380px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 18px;
+      background: linear-gradient(165deg, #1c1c26 0%, #121218 100%);
+      border: 1px solid rgba(201, 162, 39, 0.35);
+      box-shadow:
+        0 -4px 28px rgba(0, 0, 0, 0.55),
+        0 0 24px rgba(201, 162, 39, 0.08);
+    }
+
+    .balance-block {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding-left: 4px;
+    }
+
+    .balance-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .balance-value {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--gold);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+
+    .balance-value .star {
+      font-size: 1.1rem;
+      filter: drop-shadow(0 0 6px rgba(201, 162, 39, 0.5));
+    }
+
+    .balance-value.bump {
+      animation: bal-bump 0.45s cubic-bezier(0.34, 1.4, 0.64, 1);
+    }
+
+    .topup-btn {
+      appearance: none;
+      border: none;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: #1a1408;
+      background: linear-gradient(180deg, #f0d878 0%, #c9a227 100%);
+      padding: 12px 16px;
+      border-radius: 12px;
+      white-space: nowrap;
+      box-shadow: 0 4px 14px rgba(201, 162, 39, 0.3);
+      transition: transform 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .topup-btn:active {
+      transform: scale(0.96);
+    }
+
+    .topup-btn.attention {
+      animation: pulse-glow 1.6s ease-in-out infinite;
+    }
+
+    /* ── Overlays / modals ── */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      background: rgba(5, 5, 8, 0.72);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.35s ease;
+      z-index: 40;
+      padding: 16px 14px calc(16px + var(--safe-b));
+    }
+
+    .overlay.center {
+      align-items: center;
+    }
+
+    .overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .sheet {
+      width: 100%;
+      max-width: 380px;
+      border-radius: 22px 22px 18px 18px;
+      background: linear-gradient(165deg, #22222e 0%, #121218 100%);
+      border: 1px solid rgba(201, 162, 39, 0.35);
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+      padding: 20px 18px 18px;
+      transform: translateY(24px);
+      transition: transform 0.4s cubic-bezier(0.34, 1.15, 0.64, 1);
+    }
+
+    .overlay.center .sheet {
+      border-radius: 22px;
+      transform: translateY(12px) scale(0.96);
+    }
+
+    .overlay.show .sheet {
+      transform: translateY(0) scale(1);
+    }
+
+    .sheet-handle {
+      width: 36px;
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      margin: 0 auto 14px;
+    }
+
+    .sheet h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    .sheet .lead {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.88rem;
+      line-height: 1.45;
+      margin-bottom: 16px;
+    }
+
+    .packages {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .pkg {
+      appearance: none;
+      border: 1.5px solid rgba(201, 162, 39, 0.28);
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 14px;
+      padding: 14px 10px;
+      cursor: pointer;
+      color: var(--text);
+      font: inherit;
+      text-align: center;
+      transition: border-color 0.15s, background 0.15s, transform 0.12s;
+      position: relative;
+    }
+
+    .pkg:active { transform: scale(0.97); }
+
+    .pkg.hot {
+      border-color: rgba(201, 162, 39, 0.75);
+      background: linear-gradient(160deg, rgba(201, 162, 39, 0.18) 0%, rgba(201, 162, 39, 0.05) 100%);
+    }
+
+    .pkg .badge {
+      position: absolute;
+      top: -8px;
+      right: 8px;
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: linear-gradient(180deg, #f0d878, #c9a227);
+      color: #1a1408;
+      padding: 3px 7px;
+      border-radius: 999px;
+    }
+
+    .pkg .amt {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--gold);
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .pkg .sub {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .err {
+      color: var(--danger);
+      font-size: 0.82rem;
+      text-align: center;
+      min-height: 1.2em;
+      margin-top: 4px;
+    }
+
+    .lose-emoji {
+      font-size: 2.2rem;
+      text-align: center;
+      margin-bottom: 6px;
+      line-height: 1;
+    }
+
+    .cost-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin: 0 auto 14px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #1a1408;
+      background: linear-gradient(180deg, #e8d48a 0%, #c9a227 100%);
+    }
+
+    .pill-row {
+      display: flex;
+      justify-content: center;
     }
 
     @keyframes shake {
@@ -318,83 +596,141 @@
       60% { transform: scaleX(1) translateX(4px); }
       75% { transform: scaleX(1) translateX(-2px); }
     }
+
+    @keyframes shine {
+      0%, 60%, 100% { transform: translateX(-120%); }
+      75% { transform: translateX(120%); }
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 4px 14px rgba(201, 162, 39, 0.3); }
+      50% { box-shadow: 0 4px 28px rgba(201, 162, 39, 0.65); }
+    }
+
+    @keyframes bal-bump {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.12); }
+      100% { transform: scale(1); }
+    }
+
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Find 3 identical fruits<span class="win-line">Win 100 stars</span></h1>
-    <p class="attempts">Attempts: <strong id="attempts">3</strong></p>
-    <p class="pay-badge">One game — <span id="priceLabel">10 ⭐</span></p>
-    <div class="board locked" id="board" aria-label="Game board"></div>
-    <p class="hint">Find 3 identical fruits</p>
-  </div>
+    <header class="header">
+      <div class="brand">BANANAWOW</div>
+      <h1>Найди 3 одинаковых</h1>
+      <p class="subtitle">3 хода · приз <strong>100 ⭐</strong></p>
+    </header>
 
-  <!-- Paywall / start -->
-  <div class="overlay show" id="payOverlay" role="dialog" aria-modal="true">
-    <div class="modal">
-      <h2 style="color: var(--lose);">Ready to play?</h2>
-      <p>Open 3 identical fruits in 3 moves. Good luck!</p>
-      <div class="price-tag" id="priceTag">⭐ 10 Stars</div>
-      <button type="button" class="btn" id="payBtn">Play for 10 ⭐</button>
-      <p class="err" id="payErr"></p>
-      <button type="button" class="btn btn-ghost" id="demoBtn" hidden>Demo (browser, free)</button>
+    <div class="chips">
+      <div class="chip" id="attemptsChip">Ходы: <strong id="attempts">3</strong></div>
+      <div class="chip" id="costChip">Игра: <strong id="costLabel">10 ⭐</strong></div>
+    </div>
+
+    <div class="board-shell">
+      <div class="board locked preview" id="board" aria-label="Игровое поле"></div>
+    </div>
+
+    <div class="play-area" id="playArea">
+      <button type="button" class="btn btn-pulse" id="playBtn">Играть · 10 ⭐</button>
+      <p class="hint-line" id="hintLine">Пополни баланс и начинай</p>
     </div>
   </div>
 
-  <!-- Lose -->
-  <div class="overlay" id="loseOverlay" role="dialog" aria-modal="true" aria-labelledby="lose-title">
-    <div class="modal">
-      <h2 id="lose-title">You lost</h2>
-      <p>No three of a kind. Play again for 10 ⭐.</p>
-      <button type="button" class="btn" id="retryPayBtn">Play again for 10 ⭐</button>
+  <!-- Нижняя панель: баланс + пополнение -->
+  <div class="bottom-bar" id="bottomBar">
+    <div class="bottom-inner">
+      <div class="balance-block">
+        <span class="balance-label">Баланс</span>
+        <div class="balance-value" id="balanceValue">
+          <span class="star">⭐</span>
+          <span id="balanceNum">…</span>
+        </div>
+      </div>
+      <button type="button" class="topup-btn" id="topupBtn">
+        <span>+</span> Пополнить
+      </button>
+    </div>
+  </div>
+
+  <!-- Пополнение -->
+  <div class="overlay" id="topupOverlay" role="dialog" aria-modal="true">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <h2>Пополнить ⭐</h2>
+      <p class="lead">Выбери пакет. Звёзды сразу на баланс — играй когда удобно.</p>
+      <div class="packages" id="packages"></div>
+      <button type="button" class="btn btn-ghost" id="topupClose">Закрыть</button>
+      <p class="err" id="topupErr"></p>
+    </div>
+  </div>
+
+  <!-- Проигрыш -->
+  <div class="overlay center" id="loseOverlay" role="dialog" aria-modal="true">
+    <div class="sheet">
+      <div class="lose-emoji">🙈</div>
+      <h2>Не в этот раз</h2>
+      <p class="lead">Три одинаковых не собрались. Попробуй ещё — удача любит смелых!</p>
+      <div class="pill-row"><span class="cost-pill" id="loseCostPill">⭐ 10 за игру</span></div>
+      <button type="button" class="btn" id="retryBtn">Сыграть ещё · 10 ⭐</button>
+      <button type="button" class="btn btn-ghost" id="loseClose" style="margin-top:8px">На главный</button>
       <p class="err" id="retryErr"></p>
     </div>
   </div>
 
   <script>
     (function () {
-      // Иконки: assets/icons/<id>.png — v= ломает кэш Telegram WebView
       const ICON_V = "20260726d";
       const ICON_BASE = "assets/icons/";
       const iconUrl = (name) => ICON_BASE + name + "?v=" + ICON_V;
       const CARD_BACK = iconUrl("card_back.png");
       const FRUITS = [
-        { id: "banana", icon: iconUrl("banana.png"), label: "Banana" },
-        { id: "strawberry", icon: iconUrl("strawberry.png"), label: "Strawberry" },
-        { id: "cherry", icon: iconUrl("cherry.png"), label: "Cherry" },
-        { id: "lemon", icon: iconUrl("lemon.png"), label: "Lemon" },
-        { id: "grape", icon: iconUrl("grape.png"), label: "Grape" },
+        { id: "banana", icon: iconUrl("banana.png"), label: "Банан" },
+        { id: "strawberry", icon: iconUrl("strawberry.png"), label: "Клубника" },
+        { id: "cherry", icon: iconUrl("cherry.png"), label: "Вишня" },
+        { id: "lemon", icon: iconUrl("lemon.png"), label: "Лимон" },
+        { id: "grape", icon: iconUrl("grape.png"), label: "Виноград" },
       ];
 
-      // Preload images so flip is never empty
       [CARD_BACK].concat(FRUITS.map((f) => f.icon)).forEach((src) => {
         const im = new Image();
         im.src = src;
       });
 
       const MAX_ATTEMPTS = 3;
-      const PRICE = 10;
+      let GAME_COST = 10;
+      let PACKAGES = [10, 30, 50, 100, 250];
+      const ADMIN_USERNAMES = ["bonamartin69"];
 
       const boardEl = document.getElementById("board");
       const attemptsEl = document.getElementById("attempts");
-      const payOverlay = document.getElementById("payOverlay");
+      const attemptsChip = document.getElementById("attemptsChip");
+      const costLabel = document.getElementById("costLabel");
+      const playBtn = document.getElementById("playBtn");
+      const hintLine = document.getElementById("hintLine");
+      const balanceNum = document.getElementById("balanceNum");
+      const balanceValue = document.getElementById("balanceValue");
+      const topupBtn = document.getElementById("topupBtn");
+      const topupOverlay = document.getElementById("topupOverlay");
+      const topupClose = document.getElementById("topupClose");
+      const topupErr = document.getElementById("topupErr");
+      const packagesEl = document.getElementById("packages");
       const loseOverlay = document.getElementById("loseOverlay");
-      const payBtn = document.getElementById("payBtn");
-      const retryPayBtn = document.getElementById("retryPayBtn");
-      const payErr = document.getElementById("payErr");
+      const retryBtn = document.getElementById("retryBtn");
+      const loseClose = document.getElementById("loseClose");
       const retryErr = document.getElementById("retryErr");
-      const demoBtn = document.getElementById("demoBtn");
-      const priceLabel = document.getElementById("priceLabel");
-      const priceTag = document.getElementById("priceTag");
-
-      // Free-play admins (mirrored on server)
-      const ADMIN_USERNAMES = ["bonamartin69"];
+      const loseCostPill = document.getElementById("loseCostPill");
+      const playArea = document.getElementById("playArea");
 
       let deck = [];
       let attemptsLeft = MAX_ATTEMPTS;
       let locked = true;
-      let paidRound = false;
+      let inRound = false;
+      let balance = 0;
       let isAdmin = false;
+      let loading = false;
 
       const tg = window.Telegram && window.Telegram.WebApp;
 
@@ -402,8 +738,9 @@
         if (tg) {
           tg.ready();
           tg.expand();
-          if (tg.setHeaderColor) tg.setHeaderColor("#0a0a0c");
-          if (tg.setBackgroundColor) tg.setBackgroundColor("#0a0a0c");
+          if (tg.setHeaderColor) tg.setHeaderColor("#07070a");
+          if (tg.setBackgroundColor) tg.setBackgroundColor("#07070a");
+          if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
         }
       } catch (_) {}
 
@@ -431,71 +768,117 @@
         return String(u).replace(/^@/, "").toLowerCase();
       }
 
+      function localUserId() {
+        return (
+          (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) ||
+          null
+        );
+      }
+
       function isLocalAdmin() {
         const name = localUsername();
         return !!(name && ADMIN_USERNAMES.indexOf(name) !== -1);
       }
 
       const inTelegram = isInsideTelegram();
+      if (isLocalAdmin()) isAdmin = true;
 
-      demoBtn.hidden = true;
-      if (!inTelegram) {
-        const platform = String((tg && tg.platform) || "unknown").toLowerCase();
-        if (platform === "unknown" || /[?&#]demo=1(?:&|$)/.test(location.href)) {
-          demoBtn.hidden = false;
+      function setBalance(n, animate) {
+        const prev = balance;
+        balance = Math.max(0, Number(n) || 0);
+        if (isAdmin) {
+          balanceNum.textContent = "∞";
+        } else {
+          balanceNum.textContent = String(balance);
         }
+        if (animate && balance !== prev) {
+          balanceValue.classList.remove("bump");
+          void balanceValue.offsetWidth;
+          balanceValue.classList.add("bump");
+        }
+        refreshPlayUi();
       }
 
-      function applyAdminUi() {
-        if (!isAdmin) return;
-        priceLabel.textContent = "admin · free";
-        priceTag.textContent = "👑 Admin";
-        payBtn.textContent = "Play free";
-        retryPayBtn.textContent = "Play again (free)";
-        const loseP = loseOverlay.querySelector("p");
-        if (loseP) loseP.textContent = "No three of a kind. You can play again right away.";
-      }
+      function refreshPlayUi() {
+        const costTxt = GAME_COST + " ⭐";
+        costLabel.textContent = isAdmin ? "бесплатно" : costTxt;
+        loseCostPill.textContent = isAdmin ? "👑 бесплатно" : "⭐ " + GAME_COST + " за игру";
 
-      function applyPaidUi() {
-        priceLabel.textContent = PRICE + " ⭐";
-        priceTag.textContent = "⭐ " + PRICE + " Stars";
-        payBtn.textContent = "Play for " + PRICE + " ⭐";
-        retryPayBtn.textContent = "Play again for " + PRICE + " ⭐";
-      }
+        if (inRound) {
+          playArea.classList.add("hidden");
+          attemptsChip.classList.add("live");
+          boardEl.classList.remove("preview");
+          return;
+        }
 
-      applyPaidUi();
+        playArea.classList.remove("hidden");
+        attemptsChip.classList.remove("live");
+        boardEl.classList.add("preview");
 
-      if (isLocalAdmin()) {
-        isAdmin = true;
-        applyAdminUi();
-      }
+        if (isAdmin) {
+          playBtn.textContent = "Играть бесплатно";
+          playBtn.classList.add("btn-pulse");
+          topupBtn.classList.remove("attention");
+          hintLine.textContent = "Админ-режим · без списания";
+          hintLine.className = "hint-line ok";
+          retryBtn.textContent = "Сыграть ещё (free)";
+          return;
+        }
 
-      (async function checkAdmin() {
-        try {
-          const endpoint = new URL("/api/me", window.location.origin).href;
-          const res = await fetch(endpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              initData: (tg && tg.initData) || "",
-              username: localUsername(),
-              userId:
-                (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) ||
-                null,
-            }),
-          });
-          const data = await res.json();
-          if (data && data.isAdmin) {
-            isAdmin = true;
-            applyAdminUi();
-          } else if (data && data.verified && !data.isAdmin) {
-            isAdmin = false;
-            applyPaidUi();
+        retryBtn.textContent = "Сыграть ещё · " + GAME_COST + " ⭐";
+
+        if (balance >= GAME_COST) {
+          playBtn.textContent = "Играть · " + GAME_COST + " ⭐";
+          playBtn.classList.add("btn-pulse");
+          topupBtn.classList.remove("attention");
+          hintLine.textContent = "Хватит на " + Math.floor(balance / GAME_COST) + " игр";
+          hintLine.className = "hint-line ok";
+        } else {
+          playBtn.textContent = "Пополнить и играть";
+          playBtn.classList.add("btn-pulse");
+          topupBtn.classList.add("attention");
+          if (balance === 0) {
+            hintLine.textContent = "Баланс пуст — пополни, чтобы играть";
+          } else {
+            hintLine.textContent = "Нужно ещё " + (GAME_COST - balance) + " ⭐";
           }
-        } catch (e) {
-          console.warn("checkAdmin", e);
+          hintLine.className = "hint-line warn";
         }
-      })();
+      }
+
+      function renderPackages() {
+        packagesEl.innerHTML = "";
+        const hot = 50;
+        PACKAGES.forEach((amt) => {
+          const games = Math.floor(amt / GAME_COST);
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "pkg" + (amt === hot ? " hot" : "");
+          btn.innerHTML =
+            (amt === hot ? '<span class="badge">Хит</span>' : "") +
+            '<span class="amt">⭐ ' + amt + "</span>" +
+            '<span class="sub">~' + games + gameWord(games) + "</span>";
+          btn.addEventListener("click", () => buyPackage(amt, btn));
+          packagesEl.appendChild(btn);
+        });
+      }
+
+      function gameWord(n) {
+        const m10 = n % 10;
+        const m100 = n % 100;
+        if (m10 === 1 && m100 !== 11) return " игра";
+        if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return " игры";
+        return " игр";
+      }
+
+      function openTopup() {
+        topupErr.textContent = "";
+        topupOverlay.classList.add("show");
+      }
+
+      function closeTopup() {
+        topupOverlay.classList.remove("show");
+      }
 
       function shuffle(arr) {
         const a = arr.slice();
@@ -524,7 +907,7 @@
           btn.type = "button";
           btn.className = "card";
           btn.dataset.index = String(index);
-          btn.setAttribute("aria-label", "Closed card");
+          btn.setAttribute("aria-label", "Закрытая карта");
           const inner = document.createElement("span");
           inner.className = "card-inner";
 
@@ -556,26 +939,35 @@
         });
       }
 
-      function prepareNewRound() {
+      function prepareLobbyBoard() {
+        attemptsLeft = MAX_ATTEMPTS;
+        attemptsEl.textContent = String(attemptsLeft);
+        locked = true;
+        inRound = false;
+        deck = generateRiggedDeck();
+        renderBoard();
+        boardEl.classList.add("locked", "preview");
+        refreshPlayUi();
+      }
+
+      function startRound() {
         attemptsLeft = MAX_ATTEMPTS;
         attemptsEl.textContent = String(attemptsLeft);
         locked = false;
-        paidRound = true;
+        inRound = true;
         deck = generateRiggedDeck();
         renderBoard();
-        boardEl.classList.remove("locked");
-        payOverlay.classList.remove("show");
+        boardEl.classList.remove("locked", "preview");
         loseOverlay.classList.remove("show");
-      }
-
-      function lockBoard() {
-        locked = true;
-        paidRound = false;
-        boardEl.classList.add("locked");
+        closeTopup();
+        refreshPlayUi();
+        try {
+          if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("medium");
+        } catch (_) {}
       }
 
       function onCardClick(index, btn) {
-        if (locked || !paidRound || attemptsLeft <= 0) return;
+        if (locked || !inRound || attemptsLeft <= 0) return;
         if (btn.classList.contains("flipped")) return;
 
         btn.classList.add("flipped");
@@ -583,6 +975,10 @@
         btn.setAttribute("aria-label", deck[index].label);
         attemptsLeft -= 1;
         attemptsEl.textContent = String(attemptsLeft);
+
+        try {
+          if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
+        } catch (_) {}
 
         if (attemptsLeft === 0) {
           locked = true;
@@ -606,120 +1002,261 @@
               c.setAttribute("aria-label", deck[i].label);
             }
           });
-          paidRound = false;
+          inRound = false;
+          locked = true;
+          boardEl.classList.add("locked");
+          refreshPlayUi();
           setTimeout(() => loseOverlay.classList.add("show"), 280);
         }, 580);
       }
 
-      async function createInvoiceLink() {
-        const userId =
-          (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) ||
-          "0";
-        const endpoint = new URL("/api/create-invoice", window.location.origin).href;
+      async function apiPost(path, body) {
+        const endpoint = new URL(path, window.location.origin).href;
         const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId: String(userId),
-            initData: (tg && tg.initData) || "",
-          }),
+          body: JSON.stringify(body || {}),
         });
         let data = {};
         try {
           data = await res.json();
         } catch (_) {
-          throw new Error("Server did not respond (code " + res.status + ")");
+          throw new Error("Сервер не ответил (" + res.status + ")");
         }
-        if (!res.ok || !data.ok) {
-          const msg = data.error || "Could not create invoice";
-          throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
-        }
-        if (data.free) {
-          return { free: true };
-        }
-        if (!data.invoiceLink) {
-          throw new Error("Could not create invoice");
-        }
-        return { free: false, invoiceLink: data.invoiceLink };
+        return { res, data };
       }
 
-      function openStarsPayment(errEl, btn) {
-        return new Promise(async (resolve) => {
-          errEl.textContent = "";
-          btn.disabled = true;
+      function authBody(extra) {
+        return Object.assign(
+          {
+            initData: (tg && tg.initData) || "",
+            username: localUsername(),
+            userId: localUserId(),
+          },
+          extra || {}
+        );
+      }
 
+      async function refreshMe() {
+        try {
+          const { data } = await apiPost("/api/me", authBody());
+          if (data.gameCost) GAME_COST = data.gameCost;
+          if (Array.isArray(data.packages) && data.packages.length) {
+            PACKAGES = data.packages;
+            renderPackages();
+          }
+          if (data.isAdmin) isAdmin = true;
+          if (typeof data.balance === "number") setBalance(data.balance, false);
+          else refreshPlayUi();
+        } catch (e) {
+          console.warn("refreshMe", e);
+          if (isAdmin) setBalance(0, false);
+          else {
+            balanceNum.textContent = "0";
+            refreshPlayUi();
+          }
+        }
+      }
+
+      async function startPlayFromBalance(errEl) {
+        if (loading) return false;
+        loading = true;
+        playBtn.disabled = true;
+        retryBtn.disabled = true;
+        if (errEl) errEl.textContent = "";
+
+        try {
+          // Админ — сразу
           if (isAdmin || isLocalAdmin()) {
             isAdmin = true;
-            applyAdminUi();
-            btn.disabled = false;
-            resolve(true);
+            startRound();
+            return true;
+          }
+
+          // Не хватает — открыть пополнение
+          if (balance < GAME_COST) {
+            openTopup();
+            hintLine.textContent = "Выбери пакет и пополни баланс";
+            hintLine.className = "hint-line warn";
+            return false;
+          }
+
+          // Демо в браузере без Telegram
+          if (!inTelegram) {
+            if (/[?&#]demo=1(?:&|$)/.test(location.href)) {
+              setBalance(balance - GAME_COST, true);
+              startRound();
+              return true;
+            }
+            if (errEl) errEl.textContent = "Открой игру через Telegram-бота.";
+            hintLine.textContent = "Открой игру через кнопку «Играть» в боте";
+            hintLine.className = "hint-line warn";
+            return false;
+          }
+
+          const { res, data } = await apiPost("/api/play", authBody());
+          if (data.isAdmin) {
+            isAdmin = true;
+            startRound();
+            return true;
+          }
+          if (data.ok) {
+            if (typeof data.balance === "number") setBalance(data.balance, true);
+            else setBalance(balance - GAME_COST, true);
+            startRound();
+            return true;
+          }
+          if (data.error === "insufficient" || res.status === 402) {
+            if (typeof data.balance === "number") setBalance(data.balance, false);
+            openTopup();
+            if (errEl) errEl.textContent = data.message || "Недостаточно ⭐";
+            return false;
+          }
+          if (data.error === "open_in_telegram" || res.status === 401) {
+            if (errEl) errEl.textContent = "Открой игру через Telegram-бота.";
+            return false;
+          }
+          throw new Error(data.message || data.error || "Не удалось начать игру");
+        } catch (e) {
+          console.error(e);
+          if (errEl) errEl.textContent = e.message || "Ошибка";
+          return false;
+        } finally {
+          loading = false;
+          playBtn.disabled = false;
+          retryBtn.disabled = false;
+          refreshPlayUi();
+        }
+      }
+
+      async function buyPackage(amount, btn) {
+        topupErr.textContent = "";
+        if (loading) return;
+        loading = true;
+        const allPkg = packagesEl.querySelectorAll(".pkg");
+        allPkg.forEach((b) => { b.disabled = true; });
+        if (btn) btn.style.opacity = "0.6";
+
+        try {
+          if (isAdmin || isLocalAdmin()) {
+            isAdmin = true;
+            setBalance(balance, false);
+            closeTopup();
+            topupErr.textContent = "";
             return;
           }
 
           if (!canOpenInvoice()) {
-            errEl.textContent = "Open the game via the Telegram bot (Play button).";
-            btn.disabled = false;
-            resolve(false);
+            topupErr.textContent = "Открой игру через Telegram-бота (кнопка «Играть»).";
             return;
           }
 
-          try {
-            const result = await createInvoiceLink();
-            if (result.free) {
-              isAdmin = true;
-              applyAdminUi();
-              btn.disabled = false;
-              resolve(true);
-              return;
-            }
-            tg.openInvoice(result.invoiceLink, (status) => {
-              btn.disabled = false;
+          const { res, data } = await apiPost(
+            "/api/create-invoice",
+            authBody({ amount: amount })
+          );
+
+          if (data.free) {
+            isAdmin = true;
+            setBalance(data.balance || 0, false);
+            closeTopup();
+            return;
+          }
+
+          if (!res.ok || !data.ok || !data.invoiceLink) {
+            throw new Error(
+              (typeof data.error === "string" && data.error) ||
+                data.message ||
+                "Не удалось создать счёт"
+            );
+          }
+
+          await new Promise((resolve) => {
+            tg.openInvoice(data.invoiceLink, async (status) => {
               if (status === "paid") {
+                // Начисление на сервере через successful_payment — обновим баланс
+                await sleep(600);
+                await refreshMe();
+                // Fallback: если webhook/polling ещё не успел — optimistic +amount
+                // (сервер — источник истины; refreshMe уже запросил)
+                closeTopup();
+                hintLine.textContent = "Баланс пополнен! Можно играть 🎉";
+                hintLine.className = "hint-line ok";
+                try {
+                  if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+                } catch (_) {}
                 resolve(true);
               } else if (status === "cancelled") {
-                errEl.textContent = "Payment cancelled.";
+                topupErr.textContent = "Оплата отменена";
                 resolve(false);
               } else if (status === "failed") {
-                errEl.textContent = "Payment failed. Please try again.";
+                topupErr.textContent = "Оплата не прошла. Попробуй ещё раз.";
                 resolve(false);
               } else if (status === "pending") {
-                errEl.textContent = "Payment pending…";
+                topupErr.textContent = "Платёж в обработке…";
                 resolve(false);
               } else {
-                errEl.textContent = "Payment status: " + status;
+                topupErr.textContent = "Статус: " + status;
                 resolve(false);
               }
             });
-          } catch (e) {
-            console.error(e);
-            let msg = e.message || "Payment error";
-            if (msg.length > 180) msg = msg.slice(0, 180) + "…";
-            errEl.textContent = msg;
-            btn.disabled = false;
-            resolve(false);
-          }
-        });
+          });
+        } catch (e) {
+          console.error(e);
+          let msg = e.message || "Ошибка оплаты";
+          if (msg.length > 160) msg = msg.slice(0, 160) + "…";
+          topupErr.textContent = msg;
+        } finally {
+          loading = false;
+          allPkg.forEach((b) => { b.disabled = false; });
+          if (btn) btn.style.opacity = "";
+        }
       }
 
-      payBtn.addEventListener("click", async () => {
-        const ok = await openStarsPayment(payErr, payBtn);
-        if (ok) prepareNewRound();
+      function sleep(ms) {
+        return new Promise((r) => setTimeout(r, ms));
+      }
+
+      // Events
+      playBtn.addEventListener("click", async () => {
+        if (!isAdmin && balance < GAME_COST) {
+          openTopup();
+          return;
+        }
+        await startPlayFromBalance(null);
       });
 
-      retryPayBtn.addEventListener("click", async () => {
-        const ok = await openStarsPayment(retryErr, retryPayBtn);
-        if (ok) prepareNewRound();
+      retryBtn.addEventListener("click", async () => {
+        if (!isAdmin && balance < GAME_COST) {
+          loseOverlay.classList.remove("show");
+          openTopup();
+          return;
+        }
+        const ok = await startPlayFromBalance(retryErr);
+        if (ok) loseOverlay.classList.remove("show");
       });
 
-      demoBtn.addEventListener("click", () => {
-        prepareNewRound();
+      loseClose.addEventListener("click", () => {
+        loseOverlay.classList.remove("show");
+        prepareLobbyBoard();
       });
 
-      // Start locked under paywall
-      lockBoard();
-      deck = generateRiggedDeck();
-      renderBoard();
-      boardEl.classList.add("locked");
+      topupBtn.addEventListener("click", openTopup);
+      topupClose.addEventListener("click", closeTopup);
+      topupOverlay.addEventListener("click", (e) => {
+        if (e.target === topupOverlay) closeTopup();
+      });
+
+      // Init
+      renderPackages();
+      prepareLobbyBoard();
+      setBalance(0, false);
+      refreshMe();
+
+      // Периодически подтягиваем баланс (после оплаты в другом окне)
+      setInterval(() => {
+        if (!inRound && !loading) refreshMe();
+      }, 12000);
     })();
   </script>
 </body>

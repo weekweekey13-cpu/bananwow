@@ -22,6 +22,7 @@ screen/
 .DS_Store
 .idea/
 .vscode/
+data/
 
 # local-only / clutter (not needed on Render)
 START.bat

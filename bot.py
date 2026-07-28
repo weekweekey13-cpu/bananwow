@@ -1,10 +1,14 @@
 """
-Telegram Mini App bot: игра + оплата 10 Stars.
-Админы (ADMIN_USERNAMES) играют бесплатно.
+Telegram Mini App: BANANAWOW — игра за баланс Stars.
+
+- Баланс хранится на сервере (SQLite).
+- Одна игра = 10 ⭐ с баланса.
+- Пополнение через Telegram Stars (invoice packages).
+- Админы (ADMIN_USERNAMES) играют бесплатно.
 
 Локально:  python bot.py
-Облако:    Render / Free hosting — PORT из env, WEBAPP_URL из RENDER_EXTERNAL_URL
-Keep-alive: GET/HEAD /api/ping  (UptimeRobot / Cloudflare Worker каждые 5 мин)
+Облако:    Render — PORT / WEBAPP_URL / RENDER_EXTERNAL_URL
+Keep-alive: GET/HEAD /api/ping
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ import hmac
 import json
 import logging
 import os
+import sqlite3
 import threading
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -37,14 +42,19 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "1.2.0"
-PRICE_STARS = 10
+APP_VERSION = "2.0.0"
+GAME_COST = 10  # стоимость одной игры в ⭐ с баланса
+
+# Пакеты пополнения: сколько ⭐ купить (= сумма XTR)
+TOPUP_PACKAGES = (10, 30, 50, 100, 250)
+
+DB_PATH = ROOT / "data" / "balances.db"
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 WEBAPP_URL = os.getenv("WEBAPP_URL", "").strip()
 PORT = int(os.getenv("PORT", "3000"))
 
-# username без @, через запятую. Только они играют без Stars.
 ADMIN_USERNAMES = {
     u.strip().lstrip("@").lower()
     for u in os.getenv("ADMIN_USERNAMES", "bonamartin69").split(",")
@@ -60,10 +70,110 @@ log = logging.getLogger("tgbot")
 app_bot: Application | None = None
 _started_at = time.time()
 _last_external_ping: float | None = None
+_db_lock = threading.Lock()
+
+
+# ── SQLite balance ──────────────────────────────────────────────
+
+
+def _db() -> sqlite3.Connection:
+    conn = sqlite3.connect(str(DB_PATH), timeout=15, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db() -> None:
+    with _db_lock:
+        conn = _db()
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS balances (
+                    user_id INTEGER PRIMARY KEY,
+                    stars   INTEGER NOT NULL DEFAULT 0,
+                    updated_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS ledger (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    delta INTEGER NOT NULL,
+                    reason TEXT NOT NULL,
+                    payload TEXT,
+                    created_at REAL NOT NULL
+                )
+                """
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def get_balance(user_id: int) -> int:
+    with _db_lock:
+        conn = _db()
+        try:
+            row = conn.execute(
+                "SELECT stars FROM balances WHERE user_id = ?", (int(user_id),)
+            ).fetchone()
+            return int(row["stars"]) if row else 0
+        finally:
+            conn.close()
+
+
+def add_stars(user_id: int, amount: int, reason: str, payload: str = "") -> int:
+    """Начислить или списать (amount может быть отрицательным). Возвращает новый баланс."""
+    uid = int(user_id)
+    amount = int(amount)
+    now = time.time()
+    with _db_lock:
+        conn = _db()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT stars FROM balances WHERE user_id = ?", (uid,)
+            ).fetchone()
+            current = int(row["stars"]) if row else 0
+            new_bal = current + amount
+            if new_bal < 0:
+                conn.rollback()
+                raise ValueError("insufficient")
+            if row:
+                conn.execute(
+                    "UPDATE balances SET stars = ?, updated_at = ? WHERE user_id = ?",
+                    (new_bal, now, uid),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO balances (user_id, stars, updated_at) VALUES (?, ?, ?)",
+                    (uid, new_bal, now),
+                )
+            conn.execute(
+                "INSERT INTO ledger (user_id, delta, reason, payload, created_at) VALUES (?, ?, ?, ?, ?)",
+                (uid, amount, reason, payload or "", now),
+            )
+            conn.commit()
+            return new_bal
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+
+def spend_for_game(user_id: int, cost: int = GAME_COST) -> tuple[bool, int]:
+    """Списать cost ⭐. (ok, balance)."""
+    try:
+        bal = add_stars(user_id, -cost, "play", f"game_{int(time.time()*1000)}")
+        return True, bal
+    except ValueError:
+        return False, get_balance(user_id)
 
 
 def detect_public_url() -> str:
-    """HTTPS URL для Mini App: env → Render → пусто (локально)."""
     for key in (
         "WEBAPP_URL",
         "PUBLIC_URL",
@@ -96,7 +206,6 @@ def api_call(method: str, payload: dict | None = None) -> dict:
 
 
 def validate_webapp_init_data(init_data: str) -> dict | None:
-    """Проверка подписи Telegram.WebApp.initData → user dict или None."""
     if not init_data or not BOT_TOKEN:
         return None
     try:
@@ -129,6 +238,26 @@ def is_admin_user(user: dict | None) -> bool:
     if uname and uname in ADMIN_USERNAMES:
         return True
     return False
+
+
+def parse_topup_payload(payload: str) -> tuple[int, int] | None:
+    """payload: topup_{userId}_{amount}_{ts} → (user_id, amount) или None."""
+    if not payload or not payload.startswith("topup_"):
+        return None
+    parts = payload.split("_")
+    # topup, userId, amount, ts
+    if len(parts) < 4:
+        return None
+    try:
+        uid = int(parts[1])
+        amount = int(parts[2])
+    except ValueError:
+        return None
+    if amount not in TOPUP_PACKAGES and amount < 1:
+        return None
+    if amount < 1 or amount > 10000:
+        return None
+    return uid, amount
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -177,7 +306,6 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path or "/"
-        # ?v=... не должен попадать в путь к файлу
         self.path = path
 
         if path == "/api/ping":
@@ -185,7 +313,14 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/health":
             return self._json(200, self._health_payload())
         if path == "/api/price":
-            return self._json(200, {"stars": PRICE_STARS})
+            return self._json(
+                200,
+                {
+                    "stars": GAME_COST,
+                    "gameCost": GAME_COST,
+                    "packages": list(TOPUP_PACKAGES),
+                },
+            )
         if path in ("/keepalive-setup", "/keepalive-setup.html"):
             self.path = "/keepalive-setup.html"
             return super().do_GET()
@@ -204,8 +339,12 @@ class Handler(SimpleHTTPRequestHandler):
 
         if parsed.path == "/api/me":
             return self._handle_me(body)
+        if parsed.path == "/api/play":
+            return self._handle_play(body)
         if parsed.path == "/api/create-invoice":
             return self._handle_invoice(body)
+        if parsed.path == "/api/balance":
+            return self._handle_me(body)
 
         self.send_error(404)
 
@@ -214,7 +353,6 @@ class Handler(SimpleHTTPRequestHandler):
         _last_external_ping = time.time()
 
     def _ping_payload(self) -> dict:
-        """Keep-alive для UptimeRobot / Cloudflare Worker / cron-job.org."""
         self._mark_ping()
         return {
             "ok": True,
@@ -236,86 +374,196 @@ class Handler(SimpleHTTPRequestHandler):
             "uptime_sec": int(time.time() - _started_at),
             "webapp_url": WEBAPP_URL or None,
             "bot_token_set": has_token,
+            "game_cost": GAME_COST,
             "last_external_ping_sec_ago": age,
             "ping_url": "/api/ping",
             "setup_url": "/keepalive-setup",
             "hint": (
                 "Нет BOT_TOKEN в Environment — добавь в Render и Redeploy."
                 if not has_token
-                else (
-                    "Чтобы Render не засыпал: UptimeRobot → /api/ping каждые 5 мин."
-                )
+                else "Keep-alive: UptimeRobot → /api/ping каждые 5 мин."
             ),
         }
 
-    def _handle_me(self, body: dict):
-        """Кто открыл приложение: админ или нет (проверка initData)."""
+    def _resolve_user(self, body: dict) -> tuple[dict | None, bool, str | None, int | None]:
+        """→ (user, verified, username, user_id)"""
         init_data = (body.get("initData") or "").strip()
         username_hint = (body.get("username") or "").strip().lstrip("@").lower()
-
         user = validate_webapp_init_data(init_data) if init_data else None
         verified = user is not None
-
         if verified:
-            admin = is_admin_user(user)
-            uname = (user.get("username") or "").lower()
+            uname = (user.get("username") or "").lower() or None
             uid = user.get("id")
         else:
-            admin = False
             uname = username_hint or None
             uid = body.get("userId")
+            try:
+                uid = int(uid) if uid is not None else None
+            except (TypeError, ValueError):
+                uid = None
+        return user, verified, uname, uid
 
-        soft = bool(username_hint and username_hint in ADMIN_USERNAMES)
+    def _handle_me(self, body: dict):
+        user, verified, uname, uid = self._resolve_user(body)
+        admin = is_admin_user(user) if verified else False
+        soft = bool(
+            (body.get("username") or "").strip().lstrip("@").lower() in ADMIN_USERNAMES
+        )
+        is_admin = admin or (soft and not verified)
+
+        balance = 0
+        if uid is not None:
+            balance = get_balance(int(uid))
 
         log.info(
-            "api/me verified=%s admin=%s soft=%s user=%s id=%s",
+            "api/me verified=%s admin=%s user=%s id=%s bal=%s",
             verified,
-            admin,
-            soft,
+            is_admin,
             uname,
             uid,
+            balance,
         )
         self._json(
             200,
             {
                 "ok": True,
-                "isAdmin": admin or (soft and not verified),
+                "isAdmin": is_admin,
                 "verified": verified,
                 "username": uname,
                 "userId": uid,
-                "stars": PRICE_STARS,
+                "balance": balance,
+                "gameCost": GAME_COST,
+                "packages": list(TOPUP_PACKAGES),
+                "stars": GAME_COST,
+            },
+        )
+
+    def _handle_play(self, body: dict):
+        """Списать GAME_COST и разрешить раунд."""
+        user, verified, uname, uid = self._resolve_user(body)
+        admin = is_admin_user(user) if verified else False
+        soft = bool(
+            (body.get("username") or "").strip().lstrip("@").lower() in ADMIN_USERNAMES
+        )
+        is_admin = admin or (soft and not verified)
+
+        if is_admin:
+            bal = get_balance(int(uid)) if uid else 0
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "free": True,
+                    "balance": bal,
+                    "gameCost": GAME_COST,
+                    "isAdmin": True,
+                },
+            )
+            return
+
+        if not verified or uid is None:
+            self._json(
+                401,
+                {
+                    "ok": False,
+                    "error": "open_in_telegram",
+                    "message": "Откройте игру через Telegram-бота.",
+                },
+            )
+            return
+
+        ok, bal = spend_for_game(int(uid), GAME_COST)
+        if not ok:
+            self._json(
+                402,
+                {
+                    "ok": False,
+                    "error": "insufficient",
+                    "balance": bal,
+                    "gameCost": GAME_COST,
+                    "message": f"Недостаточно ⭐. Нужно {GAME_COST}, у вас {bal}.",
+                },
+            )
+            return
+
+        log.info("play user=%s bal_after=%s", uid, bal)
+        self._json(
+            200,
+            {
+                "ok": True,
+                "free": False,
+                "balance": bal,
+                "gameCost": GAME_COST,
+                "spent": GAME_COST,
             },
         )
 
     def _handle_invoice(self, body: dict):
-        init_data = (body.get("initData") or "").strip()
-        user = validate_webapp_init_data(init_data) if init_data else None
+        """Счёт на пополнение баланса (пакет Stars)."""
+        user, verified, uname, uid = self._resolve_user(body)
         if is_admin_user(user):
-            self._json(200, {"ok": True, "free": True, "stars": 0})
+            bal = get_balance(int(uid)) if uid else 0
+            self._json(
+                200,
+                {"ok": True, "free": True, "balance": bal, "isAdmin": True},
+            )
             return
 
-        user_id = body.get("userId") or "anon"
-        payload = f"play_{user_id}_{int(time.time() * 1000)}"
+        try:
+            amount = int(body.get("amount") or body.get("package") or 0)
+        except (TypeError, ValueError):
+            amount = 0
 
+        # Совместимость: старый клиент без amount → один «пакет» = GAME_COST
+        if amount <= 0:
+            amount = GAME_COST
+
+        if amount not in TOPUP_PACKAGES:
+            # разрешим любые кратные 10 в разумных пределах (на будущее)
+            if amount < 1 or amount > 10000 or amount % 1 != 0:
+                self._json(
+                    400,
+                    {
+                        "ok": False,
+                        "error": "bad_package",
+                        "message": f"Выберите пакет: {', '.join(map(str, TOPUP_PACKAGES))}",
+                        "packages": list(TOPUP_PACKAGES),
+                    },
+                )
+                return
+
+        user_id = uid if uid is not None else body.get("userId") or "anon"
+        payload = f"topup_{user_id}_{amount}_{int(time.time() * 1000)}"
+
+        games = amount // GAME_COST
         try:
             result = api_call(
                 "createInvoiceLink",
                 {
-                    "title": "One game",
+                    "title": f"+{amount} ⭐ на баланс",
                     "description": (
-                        f"Find 3 identical fruits — 3 moves. "
-                        f"Price: {PRICE_STARS} Stars."
+                        f"Пополнение BANANAWOW: +{amount} ⭐. "
+                        f"Одна игра — {GAME_COST} ⭐ (~{games} игр)."
                     ),
                     "payload": payload,
                     "provider_token": "",
                     "currency": "XTR",
-                    "prices": [{"label": "One game", "amount": PRICE_STARS}],
+                    "prices": [{"label": f"{amount} Stars", "amount": amount}],
                 },
             )
             if not result.get("ok"):
                 raise RuntimeError(result.get("description") or str(result))
             link = result["result"]
-            self._json(200, {"ok": True, "invoiceLink": link, "stars": PRICE_STARS})
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "invoiceLink": link,
+                    "stars": amount,
+                    "amount": amount,
+                    "gameCost": GAME_COST,
+                },
+            )
         except (HTTPError, URLError, RuntimeError, KeyError) as e:
             log.exception("createInvoiceLink failed")
             msg = getattr(e, "reason", None) or str(e)
@@ -340,13 +588,21 @@ def start_http():
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     log.info("HTTP http://0.0.0.0:%s  (игра + API + /api/ping)", PORT)
     log.info("Админы (free play): %s", ", ".join(sorted(ADMIN_USERNAMES)) or "(нет)")
+    log.info("Игра = %s ⭐ | пакеты: %s", GAME_COST, TOPUP_PACKAGES)
     server.serve_forever()
 
 
 def play_keyboard() -> ReplyKeyboardMarkup:
+    # URL берём свежий (туннель мог смениться без рестарта процесса)
+    global WEBAPP_URL
+    fresh = detect_public_url() or WEBAPP_URL
+    if fresh:
+        WEBAPP_URL = fresh
     url = WEBAPP_URL or f"http://127.0.0.1:{PORT}/"
+    if not url.endswith("/"):
+        url += "/"
     return ReplyKeyboardMarkup(
-        [[KeyboardButton(text="🎮 Play", web_app=WebAppInfo(url=url))]],
+        [[KeyboardButton(text="🎮 Играть", web_app=WebAppInfo(url=url))]],
         resize_keyboard=True,
     )
 
@@ -356,17 +612,21 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     user = update.effective_user
     uname = (user.username or "").lower() if user else ""
+    bal = get_balance(user.id) if user else 0
     if uname in ADMIN_USERNAMES:
         text = (
-            "👑 Admin mode\n\n"
-            "Find 3 identical fruits in 3 moves.\n"
-            "You play for free."
+            "👑 Админ-режим\n\n"
+            "Найди 3 одинаковых фрукта за 3 хода.\n"
+            "Ты играешь бесплатно.\n\n"
+            "Жми «Играть» 👇"
         )
     else:
         text = (
-            "🎰 Welcome!\n\n"
-            "Find 3 identical fruits in 3 moves.\n"
-            f"One game — {PRICE_STARS} ⭐"
+            "🎰 BANANAWOW\n\n"
+            "Найди 3 одинаковых фрукта за 3 хода.\n"
+            f"Одна игра — {GAME_COST} ⭐ с баланса.\n"
+            f"Твой баланс: {bal} ⭐\n\n"
+            "Пополни звёзды в игре и испытай удачу!"
         )
     await update.message.reply_text(text, reply_markup=play_keyboard())
 
@@ -374,29 +634,96 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
+    user = update.effective_user
+    bal = get_balance(user.id) if user else 0
     await update.message.reply_text(
-        f"One game — {PRICE_STARS} ⭐",
+        f"Баланс: {bal} ⭐ · игра — {GAME_COST} ⭐",
+        reply_markup=play_keyboard(),
+    )
+
+
+async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.effective_user:
+        return
+    bal = get_balance(update.effective_user.id)
+    await update.message.reply_text(
+        f"⭐ Твой баланс: {bal}\n"
+        f"Одна игра — {GAME_COST} ⭐\n\n"
+        "Пополнить можно прямо в мини-приложении.",
         reply_markup=play_keyboard(),
     )
 
 
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.pre_checkout_query
-    if query:
+    if not query:
+        return
+    # Принимаем topup_* и старые play_* (на всякий случай)
+    payload = query.invoice_payload or ""
+    if payload.startswith("topup_") or payload.startswith("play_"):
         await query.answer(ok=True)
+    else:
+        await query.answer(ok=False, error_message="Неизвестный платёж")
 
 
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.successful_payment:
         return
     sp = update.message.successful_payment
+    payload = sp.invoice_payload or ""
+    uid = update.effective_user.id if update.effective_user else None
+    amount_paid = int(sp.total_amount or 0)
+
     log.info(
         "Оплата OK user=%s stars=%s payload=%s",
-        update.effective_user.id if update.effective_user else "?",
-        sp.total_amount,
-        sp.invoice_payload,
+        uid,
+        amount_paid,
+        payload,
     )
-    await update.message.reply_text("✅ Payment successful! You can play now.")
+
+    credited = 0
+    new_bal = 0
+    parsed = parse_topup_payload(payload)
+    if parsed:
+        pay_uid, pack_amount = parsed
+        credit_uid = pay_uid if pay_uid else uid
+        # Начисляем то, что реально оплатили (и пакет)
+        credited = amount_paid if amount_paid > 0 else pack_amount
+        if credit_uid:
+            try:
+                new_bal = add_stars(credit_uid, credited, "topup", payload)
+            except Exception:
+                log.exception("credit failed")
+                new_bal = get_balance(credit_uid)
+    elif payload.startswith("play_") and uid:
+        # Старый формат: 1 игра = начислим и сразу... просто credit = paid
+        # Для совместимости: начислим на баланс (пользователь сам спишет через play)
+        credited = amount_paid or GAME_COST
+        try:
+            new_bal = add_stars(uid, credited, "topup_legacy", payload)
+        except Exception:
+            log.exception("legacy credit failed")
+            new_bal = get_balance(uid)
+    elif uid and amount_paid > 0:
+        credited = amount_paid
+        try:
+            new_bal = add_stars(uid, credited, "topup_raw", payload)
+        except Exception:
+            log.exception("raw credit failed")
+            new_bal = get_balance(uid)
+
+    if credited > 0:
+        await update.message.reply_text(
+            f"✅ +{credited} ⭐ на баланс!\n"
+            f"Сейчас: {new_bal} ⭐\n\n"
+            f"Одна игра — {GAME_COST} ⭐. Открой мини-приложение и играй 👇",
+            reply_markup=play_keyboard(),
+        )
+    else:
+        await update.message.reply_text(
+            "✅ Оплата прошла! Открой мини-приложение.",
+            reply_markup=play_keyboard(),
+        )
 
 
 def set_menu_button(url: str):
@@ -406,7 +733,7 @@ def set_menu_button(url: str):
             {
                 "menu_button": {
                     "type": "web_app",
-                    "text": "Play",
+                    "text": "Играть",
                     "web_app": {"url": url},
                 }
             },
@@ -421,6 +748,7 @@ def main():
 
     load_dotenv(ROOT / ".env", override=True)
     BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+    init_db()
 
     try:
         PORT = int(os.getenv("PORT", "3000"))
@@ -434,32 +762,29 @@ def main():
         if u.strip()
     }
 
-    # HTTP сразу (Render / health / UptimeRobot). Не daemon: иначе процесс
-    # может завершиться, если polling ещё не стартовал.
     http_thread = threading.Thread(target=start_http, daemon=False)
     http_thread.start()
     time.sleep(0.8)
     log.info(
-        "Boot: port=%s webapp=%s token=%s",
+        "Boot: port=%s webapp=%s token=%s v=%s",
         PORT,
         WEBAPP_URL or "(empty)",
         "yes" if BOT_TOKEN else "MISSING",
+        APP_VERSION,
     )
 
     if not WEBAPP_URL:
         log.warning(
             "WEBAPP_URL пуст — на Render обычно есть RENDER_EXTERNAL_URL. "
-            "Кнопка Play может не работать, пока URL не определится."
+            "Кнопка Играть может не работать, пока URL не определится."
         )
     elif BOT_TOKEN:
-        # не валим процесс, если Telegram API временно недоступен
         try:
             set_menu_button(WEBAPP_URL if WEBAPP_URL.endswith("/") else WEBAPP_URL + "/")
         except Exception:
             log.exception("set_menu_button (non-fatal)")
 
     if not BOT_TOKEN:
-        # Не SystemExit: иначе Render = Failed. Держим HTTP и пишем в логи.
         log.error(
             "Нет BOT_TOKEN! Render → Environment → Add: BOT_TOKEN = токен @BotFather → Save → Manual Deploy"
         )
@@ -467,12 +792,12 @@ def main():
             time.sleep(300)
             log.error("Всё ещё нет BOT_TOKEN — бот не отвечает в Telegram, HTTP жив")
 
-    # polling с авто-рестартом (сеть / Conflict если где-то ещё крутится тот же BOT_TOKEN)
     while True:
         try:
             app_bot = Application.builder().token(BOT_TOKEN).build()
             app_bot.add_handler(CommandHandler("start", cmd_start))
             app_bot.add_handler(CommandHandler("play", cmd_play))
+            app_bot.add_handler(CommandHandler("balance", cmd_balance))
             app_bot.add_handler(PreCheckoutQueryHandler(pre_checkout))
             app_bot.add_handler(
                 MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment)
@@ -483,7 +808,6 @@ def main():
                 ADMIN_USERNAMES,
                 PORT,
             )
-            # Важно: только ОДИН процесс с этим токеном (закрой START.bat / локальный bot.py)
             app_bot.run_polling(
                 drop_pending_updates=True,
                 allowed_updates=Update.ALL_TYPES,
