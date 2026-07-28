@@ -1379,6 +1379,81 @@
         } catch (_) {}
       }
 
+      // ── Звук переворота карты (Web Audio, без файлов) ──
+      let audioCtx = null;
+
+      function getAudioCtx() {
+        if (!audioCtx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return null;
+          audioCtx = new AC();
+        }
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume().catch(function () {});
+        }
+        return audioCtx;
+      }
+
+      /** Короткий «whoosh + soft chime» при открытии карты */
+      function playCardFlipSound(step) {
+        try {
+          const ctx = getAudioCtx();
+          if (!ctx) return;
+          const t0 = ctx.currentTime;
+          // чуть выше тон с каждым ходом
+          const base = 380 + (step || 0) * 90;
+
+          // noise whoosh (переворот)
+          const nLen = Math.floor(ctx.sampleRate * 0.08);
+          const buf = ctx.createBuffer(1, nLen, ctx.sampleRate);
+          const data = buf.getChannelData(0);
+          for (let i = 0; i < nLen; i++) {
+            data[i] = (Math.random() * 2 - 1) * (1 - i / nLen);
+          }
+          const noise = ctx.createBufferSource();
+          noise.buffer = buf;
+          const nFilter = ctx.createBiquadFilter();
+          nFilter.type = "bandpass";
+          nFilter.frequency.value = 1200;
+          nFilter.Q.value = 0.7;
+          const nGain = ctx.createGain();
+          nGain.gain.setValueAtTime(0.0001, t0);
+          nGain.gain.exponentialRampToValueAtTime(0.22, t0 + 0.01);
+          nGain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.09);
+          noise.connect(nFilter);
+          nFilter.connect(nGain);
+          nGain.connect(ctx.destination);
+          noise.start(t0);
+          noise.stop(t0 + 0.1);
+
+          // soft sparkle
+          const osc = ctx.createOscillator();
+          const osc2 = ctx.createOscillator();
+          osc.type = "sine";
+          osc2.type = "triangle";
+          osc.frequency.setValueAtTime(base, t0);
+          osc.frequency.exponentialRampToValueAtTime(base * 1.6, t0 + 0.12);
+          osc2.frequency.setValueAtTime(base * 1.5, t0);
+          osc2.frequency.exponentialRampToValueAtTime(base * 2.2, t0 + 0.1);
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0.0001, t0);
+          g.gain.exponentialRampToValueAtTime(0.16, t0 + 0.015);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+          const g2 = ctx.createGain();
+          g2.gain.setValueAtTime(0.0001, t0);
+          g2.gain.exponentialRampToValueAtTime(0.07, t0 + 0.02);
+          g2.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.14);
+          osc.connect(g);
+          osc2.connect(g2);
+          g.connect(ctx.destination);
+          g2.connect(ctx.destination);
+          osc.start(t0);
+          osc2.start(t0 + 0.01);
+          osc.stop(t0 + 0.2);
+          osc2.stop(t0 + 0.16);
+        } catch (_) {}
+      }
+
       function onCardClick(index, btn) {
         if (locked || !inRound || attemptsLeft <= 0) return;
         if (btn.classList.contains("flipped")) return;
@@ -1392,6 +1467,8 @@
         } else {
           ensureFruitAt(index, pickOtherFruit());
         }
+
+        playCardFlipSound(step);
 
         btn.classList.add("flipped");
         btn.disabled = true;
