@@ -1100,15 +1100,18 @@
             }
           }
         }
-        // лёгкое обновление кнопки без всего refreshPlayUi
-        if (!inRound && playBtn && !freePlayAvailable && !isAdmin) {
-          if (balance >= v) {
-            playBtn.textContent =
-              "Играть · " + v + " ⭐ → " + previewPrize() + " ⭐";
-          } else {
-            playBtn.textContent = "Пополнить и играть";
-          }
+        // лёгкое обновление кнопки (учитываем free-игру)
+        if (!inRound && playBtn) {
+          playBtn.textContent = playButtonLabel();
         }
+      }
+
+      /** Текст главной кнопки по правилам: free → баланс → пополнить */
+      function playButtonLabel() {
+        if (freePlayAvailable) return "Сыграть бесплатно";
+        if (isAdmin) return "Играть";
+        if (balance >= currentStake && balance > 0) return "Играть";
+        return "Пополнить и играть";
       }
 
       function setStake(n, fromUi) {
@@ -1193,41 +1196,43 @@
           freeBadge.classList.add("show");
           freeBadge.textContent =
             "🎁 Первая игра бесплатно · выигрыш " + FREE_FIRST_PRIZE + " ⭐";
-          playBtn.textContent = "Играть бесплатно 🎁";
+          playBtn.textContent = "Сыграть бесплатно";
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.remove("attention");
           hintLine.textContent =
-            "Free-игра · +" +
-            FREE_FIRST_PRIZE +
-            " ⭐ · вывод от " +
-            TG_WITHDRAW_MIN +
-            " ⭐";
+            "Первая игра бесплатно · приз " + FREE_FIRST_PRIZE + " ⭐";
           hintLine.className = "hint-line ok";
-          retryBtn.textContent = "Сыграть бесплатно 🎁";
+          retryBtn.textContent = "Сыграть бесплатно";
+          if (winRetryBtn) winRetryBtn.textContent = "Сыграть бесплатно";
           return;
         }
 
         freeBadge.classList.remove("show");
 
         if (isAdmin) {
-          playBtn.textContent = "Играть бесплатно";
+          playBtn.textContent = "Играть";
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.remove("attention");
           hintLine.textContent =
             "Админ · ставка " + currentStake + " · приз ×" + WIN_MULTIPLIER;
           hintLine.className = "hint-line ok";
-          retryBtn.textContent = "Сыграть ещё (free)";
+          retryBtn.textContent = "Играть";
           return;
         }
 
-        retryBtn.textContent = "Сыграть ещё · " + currentStake + " ⭐";
+        retryBtn.textContent =
+          balance >= currentStake ? "Играть" : "Пополнить и играть";
+        if (winRetryBtn) {
+          winRetryBtn.textContent =
+            balance >= currentStake ? "Играть" : "Пополнить и играть";
+        }
 
-        if (balance >= currentStake) {
-          playBtn.textContent =
-            "Играть · " + currentStake + " ⭐ → " + previewPrize() + " ⭐";
+        playBtn.textContent = playButtonLabel();
+
+        if (balance >= currentStake && balance > 0) {
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.remove("attention");
-          let hint =
+          hintLine.textContent =
             "Ставка " +
             currentStake +
             " · выигрыш ×" +
@@ -1235,19 +1240,12 @@
             " = " +
             previewPrize() +
             " ⭐";
-          if (balance < TG_WITHDRAW_MIN) {
-            hint += " · до вывода ещё " + (TG_WITHDRAW_MIN - balance) + " ⭐";
-          } else {
-            hint += " · можно вывести";
-          }
-          hintLine.textContent = hint;
           hintLine.className = "hint-line ok";
         } else {
-          playBtn.textContent = "Пополнить и играть";
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.add("attention");
           if (balance === 0) {
-            hintLine.textContent = "Баланс пуст — пополни, чтобы играть";
+            hintLine.textContent = "Пополни баланс, чтобы играть";
           } else {
             hintLine.textContent =
               "Нужно ещё " + (currentStake - balance) + " ⭐ на ставку";
@@ -1942,25 +1940,40 @@
           if (data.tgWithdrawMin) TG_WITHDRAW_MIN = data.tgWithdrawMin;
           if (typeof data.freePlayAvailable === "boolean") {
             freePlayAvailable = data.freePlayAvailable;
+          } else if (data.userId != null && data.balance === 0) {
+            // fallback: новый игрок без явного флага — пробуем free
+            freePlayAvailable = true;
           }
           if (Array.isArray(data.packages) && data.packages.length) {
             PACKAGES = data.packages;
             renderPackages();
           }
           if (data.isAdmin) isAdmin = true;
-          setStake(currentStake);
+          if (typeof data.balance === "number") {
+            balance = Math.max(0, Number(data.balance) || 0);
+            if (isAdmin) balanceNum.textContent = "∞";
+            else balanceNum.textContent = String(balance);
+          }
+          setStake(currentStake, true);
           renderStakePresets();
-          if (typeof data.balance === "number") setBalance(data.balance, false);
-          else refreshPlayUi();
-          claimBtn.textContent = "На баланс · " + previewPrize() + " ⭐";
-          winPrizePill.textContent = "⭐ +" + previewPrize();
+          // всегда обновляем кнопку (free / играть / пополнить)
+          refreshPlayUi();
+          if (claimBtn) {
+            claimBtn.textContent = "На баланс · " + previewPrize() + " ⭐";
+          }
+          if (winPrizePill) winPrizePill.textContent = "⭐ +" + previewPrize();
         } catch (e) {
           console.warn("refreshMe", e);
-          if (isAdmin) setBalance(0, false);
-          else {
-            balanceNum.textContent = "0";
-            refreshPlayUi();
+          // в Telegram до ответа сервера — показываем free, если ещё не играли
+          if (inTelegram && !localStorage.getItem("bw_free_done")) {
+            freePlayAvailable = true;
           }
+          if (isAdmin) {
+            balanceNum.textContent = "∞";
+          } else if (balanceNum) {
+            balanceNum.textContent = String(balance);
+          }
+          refreshPlayUi();
         }
       }
 
@@ -2021,7 +2034,17 @@
           }
 
           if (data && data.ok) {
-            freePlayAvailable = false;
+            if (data.firstFree || data.free) {
+              freePlayAvailable = false;
+              try {
+                localStorage.setItem("bw_free_done", "1");
+              } catch (_) {}
+            }
+            if (typeof data.freePlayAvailable === "boolean") {
+              freePlayAvailable = data.freePlayAvailable;
+            } else {
+              freePlayAvailable = false;
+            }
             if (typeof data.balance === "number") setBalance(data.balance, true);
             else if (data.spent) setBalance(balance - data.spent, true);
             startRound({
@@ -2249,12 +2272,16 @@
         });
       }
 
-      // Init
+      // Init — до ответа сервера: в TG без «уже сыграл free» показываем free-кнопку
+      if (inTelegram && !localStorage.getItem("bw_free_done")) {
+        freePlayAvailable = true;
+      }
       renderStakePresets();
-      setStake(STAKE_MIN);
+      setStake(STAKE_MIN, true);
       renderPackages();
       prepareLobbyBoard();
       setBalance(0, false);
+      refreshPlayUi();
       refreshMe();
 
       // Редко подтягиваем баланс (не во время игры — меньше лагов)
