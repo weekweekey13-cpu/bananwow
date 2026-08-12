@@ -1069,9 +1069,9 @@
       <div id="splashBonus" class="hidden">
         <div class="bonus-orb" aria-hidden="true">🎁</div>
         <h1>Welcome bonus</h1>
-        <p class="subtitle">Заберите <strong>100 ⭐</strong> на игровой счёт и играйте на них</p>
+        <p class="subtitle">Claim <strong>100 ⭐</strong> to your game balance and start playing</p>
         <div class="bonus-amount"><span>⭐</span> 100</div>
-        <button type="button" class="btn btn-pulse" id="claimBonusBtn">Забрать бонус 100 ⭐</button>
+        <button type="button" class="btn btn-pulse" id="claimBonusBtn">Claim 100 ⭐ bonus</button>
         <p class="err" id="bonusErr"></p>
       </div>
     </div>
@@ -3065,7 +3065,7 @@
                 : balance + (data.bonus || WELCOME_BONUS);
             await playBonusDrop(next);
             hideSplash();
-            hintLine.textContent = "Бонус 100 ⭐ на счёте — можно играть";
+            hintLine.textContent = "100 ⭐ bonus added — you can play";
             hintLine.className = "hint-line ok";
             refreshPlayUi();
             return;
