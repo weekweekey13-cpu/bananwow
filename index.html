@@ -1228,7 +1228,9 @@
       let withdrawFeePaid = false;
       let withdrawPaidAmount = 0;
       let pendingWithdrawAmount = 0;
-      let WIN_RATE = 0.35;
+      let WIN_RATE = 0.10;
+      let PAIR_RATE = 0.28;
+      let PAIR_STAKE_SHARE = 0.25;
       let welcomeBonusAvailable = false;
       let FRUIT_MULT = {
         banana: 50,
@@ -1321,6 +1323,7 @@
       /** Сессия сервера: выигрыш / claim */
       let sessionId = "";
       let willWin = false;
+      let pairWin = false;
       let prizeClaimed = false;
       let forcedMatchId = "";
 
@@ -1408,7 +1411,12 @@
       }
 
       function jackpotPrize() {
-        return prizeForFruit("banana") || currentStake * 100;
+        return prizeForFruit("banana") || Math.round(currentStake * 50);
+      }
+
+      function pairPrizeForStake(stake) {
+        const s = stake == null ? currentStake : Number(stake) || currentStake;
+        return Math.max(1, Math.round(s * PAIR_STAKE_SHARE));
       }
 
       function fruitById(id) {
@@ -1651,10 +1659,6 @@
       }
 
       function buildOpenPlan() {
-        if (willWin) {
-          openPlan = [matchFruit, matchFruit, matchFruit];
-          return;
-        }
         const others = FRUITS.filter(function (f) {
           return !matchFruit || f.id !== matchFruit.id;
         });
@@ -1663,17 +1667,27 @@
         if (b.id === a.id && others.length > 1) {
           b = others[(others.indexOf(a) + 1) % others.length];
         }
-        const roll = Math.random();
-        if (roll < 0.22) {
-          openPlan = [matchFruit, matchFruit, a];
-        } else if (roll < 0.42) {
-          openPlan = [a, matchFruit, matchFruit];
-        } else if (roll < 0.62) {
-          openPlan = [matchFruit, a, b];
-        } else if (roll < 0.82) {
-          openPlan = [a, b, matchFruit];
+        if (willWin) {
+          openPlan = [matchFruit, matchFruit, matchFruit];
+          return;
+        }
+        if (pairWin) {
+          const pats = [
+            [matchFruit, matchFruit, a],
+            [matchFruit, a, matchFruit],
+            [a, matchFruit, matchFruit],
+          ];
+          openPlan = pats[Math.floor(Math.random() * pats.length)];
+          return;
+        }
+        // полный проигрыш — три разных, без пары
+        let c = others[Math.floor(Math.random() * others.length)] || a;
+        const distinct = others.slice();
+        if (distinct.length >= 3) {
+          const sh = shuffle(distinct);
+          openPlan = [sh[0], sh[1], sh[2]];
         } else {
-          openPlan = [a, matchFruit, b];
+          openPlan = [a, b, matchFruit];
         }
       }
 
@@ -1778,6 +1792,9 @@
         try {
           if (typeof opts.sessionId === "string") sessionId = opts.sessionId;
           if (typeof opts.willWin === "boolean") willWin = opts.willWin;
+          if (typeof opts.pairWin === "boolean") pairWin = opts.pairWin;
+          else pairWin = false;
+          if (willWin) pairWin = false;
           if (typeof opts.matchFruit === "string" && opts.matchFruit) {
             forcedMatchId = opts.matchFruit;
           } else {
@@ -1825,7 +1842,9 @@
 
       function prepareWinSheet() {
         const fruit = matchFruit || fruitById(forcedMatchId);
-        const prize = WIN_PRIZE || prizeForFruit(fruit && fruit.id);
+        const prize = WIN_PRIZE || (pairWin
+          ? pairPrizeForStake(currentStake)
+          : prizeForFruit(fruit && fruit.id));
         if (claimBtn) {
           claimBtn.classList.remove("hidden");
           claimBtn.disabled = false;
@@ -1838,13 +1857,23 @@
           winFruitImg.src = fruit.icon;
           winFruitImg.alt = fruit.label;
         }
-        if (winTitle && fruit) {
-          winTitle.textContent = "3× " + fruit.label + "!";
-        }
-        if (winLead) {
-          winLead.textContent = fruit
-            ? "3× " + fruit.label + " — " + prize + " ⭐ drop onto your game balance."
-            : prize + " ⭐ drop onto your game balance.";
+        const kicker = document.querySelector(".win-kicker");
+        if (pairWin) {
+          if (kicker) kicker.textContent = "Two of a kind";
+          if (winTitle) winTitle.textContent = fruit ? "Pair of " + fruit.label + "s!" : "Pair!";
+          if (winLead) {
+            winLead.textContent =
+              "2× " + ((fruit && fruit.label) || "fruit") +
+              " — " + prize + " ⭐ (25% of your bet).";
+          }
+        } else {
+          if (kicker) kicker.textContent = "Three of a kind";
+          if (winTitle && fruit) winTitle.textContent = "3× " + fruit.label + "!";
+          if (winLead) {
+            winLead.textContent = fruit
+              ? "3× " + fruit.label + " — " + prize + " ⭐ drop onto your game balance."
+              : prize + " ⭐ drop onto your game balance.";
+          }
         }
       }
 
@@ -2029,6 +2058,7 @@
         if (attemptsLeft === 0) {
           locked = true;
           if (willWin) setTimeout(finishWin, 700);
+          else if (pairWin) setTimeout(function () { finishWin(true); }, 700);
           else setTimeout(finishLose, 750);
         }
       }
@@ -2258,22 +2288,30 @@
         requestAnimationFrame(tick);
       }
 
-      function finishWin() {
+      function finishWin(isPair) {
+        const pair = !!isPair || !!pairWin;
         const cards = Array.from(boardEl.querySelectorAll(".card"));
         openedOrder.forEach((i) => {
           const c = cardEl(i);
-          if (c) {
-            c.classList.remove("mismatch");
-            c.classList.add("match-ok");
-          }
+          if (!c) return;
+          const fruit = deck[i];
+          const twins = openedOrder.filter(function (j) {
+            return deck[j] && fruit && deck[j].id === fruit.id;
+          }).length;
+          c.classList.remove("mismatch");
+          if (twins >= 2 || willWin) c.classList.add("match-ok");
+          else c.classList.add("mismatch");
         });
         cards.forEach((c) => {
           const i = Number(c.dataset.index);
           if (openedOrder.indexOf(i) === -1) c.classList.add("dim");
         });
 
-        if (matchFruit && prizeForFruit(matchFruit.id) > 0 && willWin) {
+        if (!pair && matchFruit && prizeForFruit(matchFruit.id) > 0 && willWin) {
           WIN_PRIZE = prizeForFruit(matchFruit.id);
+        }
+        if (pair && (!WIN_PRIZE || WIN_PRIZE <= 0)) {
+          WIN_PRIZE = pairPrizeForStake(currentStake);
         }
         prepareWinSheet();
         prizeClaimed = false;
@@ -2293,10 +2331,11 @@
           refreshPlayUi();
           setTimeout(() => {
             winOverlay.classList.add("show");
-            playWinFanfare();
+            if (pair) playSfx("coins", 0.7);
+            else playWinFanfare();
             const cx = window.innerWidth / 2;
             const cy = window.innerHeight * 0.36;
-            burstSparks(cx, cy, 22);
+            burstSparks(cx, cy, pair ? 12 : 22);
             try {
               if (tg && tg.HapticFeedback) {
                 tg.HapticFeedback.notificationOccurred("success");
@@ -2736,6 +2775,8 @@
             if (withdrawFeePaid) pendingWithdrawAmount = withdrawPaidAmount;
           }
           if (typeof data.winRate === "number") WIN_RATE = data.winRate;
+          if (typeof data.pairRate === "number") PAIR_RATE = data.pairRate;
+          if (typeof data.pairStakeShare === "number") PAIR_STAKE_SHARE = data.pairStakeShare;
           if (!applyFruitMultipliers(data.fruitMultipliers)) {
             applyPaytable(data.paytable);
           }
@@ -2794,12 +2835,19 @@
               }
               setBalance(balance - currentStake, true);
               const fruit = FRUITS[Math.floor(Math.random() * FRUITS.length)];
-              const win = Math.random() < WIN_RATE;
+              const roll = Math.random();
+              const win = roll < WIN_RATE;
+              const pair = !win && roll < WIN_RATE + PAIR_RATE;
               startRound({
                 sessionId: "demo",
                 willWin: win,
+                pairWin: pair,
                 matchFruit: fruit.id,
-                winPrize: win ? prizeForFruit(fruit.id) : 0,
+                winPrize: win
+                  ? prizeForFruit(fruit.id)
+                  : pair
+                    ? pairPrizeForStake(currentStake)
+                    : 0,
               });
               return true;
             }
@@ -2839,6 +2887,7 @@
             startRound({
               sessionId: data.sessionId || "",
               willWin: !!data.willWin,
+              pairWin: !!data.pairWin,
               matchFruit: data.matchFruit || "",
               winPrize: typeof data.winPrize === "number" ? data.winPrize : 0,
             });

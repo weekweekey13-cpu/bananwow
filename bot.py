@@ -45,7 +45,7 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.9.1"
+APP_VERSION = "2.10.0"
 GAME_COST = 10  # мин. ставка (совместимость)
 STAKE_MIN = 10
 STAKE_MAX = 200
@@ -70,13 +70,28 @@ TG_WITHDRAW_MIN = 110
 # Сервисный сбор за вывод — оплачивается звёздами ЛИЧНОГО аккаунта (invoice XTR)
 WITHDRAW_FEE_RATE = 0.05
 
-# Базовый шанс + pity: после PITY_AFTER проигрышей подряд — гарантированный выигрыш
+# Три одинаковых — редко; чем дороже фрукт, тем реже.
 try:
-    WIN_RATE = float(os.getenv("WIN_RATE", "0.35"))
+    WIN_RATE = float(os.getenv("WIN_RATE", "0.10"))
 except ValueError:
-    WIN_RATE = 0.35
+    WIN_RATE = 0.10
 WIN_RATE = max(0.0, min(1.0, WIN_RATE))
-PITY_AFTER = 3  # 4-я игра после 3 поражений — выигрыш
+# Две из трёх — утешительный приз 25% ставки
+try:
+    PAIR_RATE = float(os.getenv("PAIR_RATE", "0.28"))
+except ValueError:
+    PAIR_RATE = 0.28
+PAIR_RATE = max(0.0, min(1.0, PAIR_RATE))
+PAIR_STAKE_SHARE = 0.25
+PITY_AFTER = 7  # после серии поражений — пара, не джекпот
+# Веса фруктов при 3 одинаковых (дороже → меньше вес)
+FRUIT_WEIGHTS: dict[str, int] = {
+    "grape": 40,
+    "lemon": 26,
+    "cherry": 18,
+    "strawberry": 11,
+    "banana": 5,
+}
 
 # Пакеты пополнения: сколько ⭐ купить (= сумма XTR)
 TOPUP_PACKAGES = (10, 30, 50, 100, 250)
@@ -108,18 +123,45 @@ def paytable_for_stake(stake: int) -> dict[str, int]:
     return {k: prize_for_fruit(k, stake) for k in FRUIT_IDS}
 
 
+def pair_prize_for_stake(stake: int) -> int:
+    """25% от ставки, минимум 1 ⭐."""
+    return max(1, int(round(int(stake) * PAIR_STAKE_SHARE)))
+
+
+def pick_weighted_fruit() -> str:
+    items = [(fid, int(FRUIT_WEIGHTS.get(fid, 1))) for fid in FRUIT_IDS]
+    total = sum(w for _, w in items) or 1
+    r = random.uniform(0, total)
+    acc = 0.0
+    for fid, w in items:
+        acc += w
+        if r <= acc:
+            return fid
+    return items[-1][0]
+
+
 def pick_round(
     stake: int = STAKE_MIN,
     user_id: int | None = None,
-) -> tuple[bool, str, int]:
-    """Исход раунда: (will_win, fruit_id, prize). Приз зависит от ставки."""
-    fruit = random.choice(FRUIT_IDS)
-    will_win = random.random() < WIN_RATE
-    if not will_win and user_id is not None:
+) -> tuple[str, str, int]:
+    """Исход: ('win'|'pair'|'lose', fruit_id, prize)."""
+    fruit = pick_weighted_fruit()
+    roll = random.random()
+    kind = "lose"
+    if roll < WIN_RATE:
+        kind = "win"
+    elif roll < WIN_RATE + PAIR_RATE:
+        kind = "pair"
+    if kind == "lose" and user_id is not None:
         if get_loss_streak(int(user_id)) >= PITY_AFTER:
-            will_win = True
-    prize = prize_for_fruit(fruit, stake) if will_win else 0
-    return will_win, fruit, prize
+            kind = "pair"
+    if kind == "win":
+        prize = prize_for_fruit(fruit, stake)
+    elif kind == "pair":
+        prize = pair_prize_for_stake(stake)
+    else:
+        prize = 0
+    return kind, fruit, prize
 
 
 def public_game_config() -> dict:
@@ -135,6 +177,8 @@ def public_game_config() -> dict:
         "withdrawFeeRate": WITHDRAW_FEE_RATE,
         "withdrawFee": withdraw_fee_for(TG_WITHDRAW_MIN),
         "winRate": WIN_RATE,
+        "pairRate": PAIR_RATE,
+        "pairStakeShare": PAIR_STAKE_SHARE,
         "pityAfter": PITY_AFTER,
         "paytable": paytable_for_stake(STAKE_MIN),
         "fruitMultipliers": dict(FRUIT_MULT),
@@ -1333,6 +1377,7 @@ class Handler(SimpleHTTPRequestHandler):
         fruit: str,
         is_admin: bool = False,
         free: bool = False,
+        pair_win: bool = False,
     ) -> None:
         payload = public_game_config()
         payload.update(
@@ -1346,6 +1391,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "spent": spent,
                 "sessionId": sid,
                 "willWin": will_win,
+                "pairWin": pair_win,
                 "matchFruit": fruit,
                 "welcomeBonusAvailable": False,
                 "freePlayAvailable": False,
@@ -1412,16 +1458,19 @@ class Handler(SimpleHTTPRequestHandler):
         )
         is_admin = admin or (soft and not verified)
         stake = clamp_stake(body.get("stake") or body.get("amount") or STAKE_MIN)
-        will_win, fruit, prize = pick_round(stake, uid)
+        kind, fruit, prize = pick_round(stake, uid)
+        will_win = kind == "win"
+        pair_win = kind == "pair"
+        claimable = kind in ("win", "pair")
 
         # --- admin: играет бесплатно, тот же шанс ---
         if is_admin:
             bal = get_balance(int(uid)) if uid else 0
             sid = ""
             if uid is not None:
-                note_round_result(int(uid), will_win)
+                note_round_result(int(uid), claimable)
                 sid = create_session(
-                    int(uid), will_win, prize, free=True, fruit=fruit
+                    int(uid), claimable, prize, free=True, fruit=fruit
                 )
             self._play_ok(
                 balance=bal,
@@ -1433,6 +1482,7 @@ class Handler(SimpleHTTPRequestHandler):
                 fruit=fruit,
                 is_admin=True,
                 free=True,
+                pair_win=pair_win,
             )
             return
 
@@ -1477,13 +1527,13 @@ class Handler(SimpleHTTPRequestHandler):
             )
             return
 
-        note_round_result(int(uid), will_win)
-        sid = create_session(int(uid), will_win, prize, free=False, fruit=fruit)
+        note_round_result(int(uid), claimable)
+        sid = create_session(int(uid), claimable, prize, free=False, fruit=fruit)
         log.info(
-            "play user=%s bal=%s win=%s fruit=%s stake=%s prize=%s session=%s",
+            "play user=%s bal=%s kind=%s fruit=%s stake=%s prize=%s session=%s",
             uid,
             bal,
-            will_win,
+            kind,
             fruit,
             stake,
             prize,
@@ -1497,6 +1547,7 @@ class Handler(SimpleHTTPRequestHandler):
             sid=sid,
             will_win=will_win,
             fruit=fruit,
+            pair_win=pair_win,
         )
 
     def _handle_tg_withdraw(self, body: dict):
