@@ -1113,6 +1113,8 @@ class Handler(SimpleHTTPRequestHandler):
             or p.endswith(".png")
             or p.endswith(".jpg")
             or p.endswith(".webp")
+            or p.endswith(".mp3")
+            or p.endswith(".wav")
             or p in ("/", "/index.html", "", "/keepalive-setup")
         ):
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
