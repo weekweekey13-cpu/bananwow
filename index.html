@@ -128,9 +128,61 @@
     }
 
     .splash .btn {
-      max-width: 220px;
+      max-width: 260px;
       margin: 0 auto;
     }
+
+    .splash-loading {
+      display: flex;
+      justify-content: center;
+      padding: 18px 0 6px;
+    }
+
+    .splash-spin {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2.5px solid rgba(201, 162, 39, 0.22);
+      border-top-color: var(--gold);
+      animation: spin 0.8s linear infinite;
+    }
+
+    .bonus-orb {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 14px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      background:
+        radial-gradient(circle at 35% 30%, #fff4c4 0%, #e0c05a 38%, #a8861a 100%);
+      box-shadow:
+        0 0 0 6px rgba(201, 162, 39, 0.12),
+        0 12px 28px rgba(201, 162, 39, 0.35);
+      animation: orb-pulse 2.4s ease-in-out infinite;
+    }
+
+    .bonus-amount {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 0 auto 22px;
+      padding: 10px 22px;
+      border-radius: 999px;
+      font-size: 1.85rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: var(--gold);
+      background: rgba(201, 162, 39, 0.1);
+      border: 1px solid rgba(201, 162, 39, 0.35);
+      font-variant-numeric: tabular-nums;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .bonus-amount span { filter: drop-shadow(0 0 8px rgba(240, 216, 120, 0.7)); }
 
     /* ── Status chips ── */
     .chips {
@@ -596,6 +648,43 @@
 
     .stake-hint strong { color: var(--gold); }
 
+    .paytable {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .pt-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 7px 2px 6px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.22);
+      border: 1px solid rgba(201, 162, 39, 0.16);
+    }
+
+    .pt-item.jackpot {
+      border-color: rgba(201, 162, 39, 0.55);
+      background: linear-gradient(180deg, rgba(201, 162, 39, 0.2), rgba(201, 162, 39, 0.05));
+    }
+
+    .pt-item img {
+      width: 26px;
+      height: 26px;
+      object-fit: contain;
+      display: block;
+    }
+
+    .pt-item span {
+      font-size: 0.68rem;
+      font-weight: 800;
+      color: var(--gold);
+      font-variant-numeric: tabular-nums;
+    }
+
     /* ── Overlays / modals ── */
     .overlay {
       position: fixed;
@@ -737,6 +826,93 @@
       line-height: 1;
     }
 
+    .win-sheet {
+      text-align: center;
+      overflow: hidden;
+    }
+
+    .win-fruit-wrap {
+      width: 92px;
+      height: 92px;
+      margin: 0 auto 10px;
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(160deg, #2e2e3a 0%, #1a1a22 100%);
+      border: 1.5px solid rgba(240, 216, 120, 0.65);
+      box-shadow:
+        0 0 0 4px rgba(201, 162, 39, 0.12),
+        0 0 32px rgba(201, 162, 39, 0.35);
+      animation: win-fruit-pop 0.7s cubic-bezier(0.34, 1.4, 0.64, 1);
+    }
+
+    .win-fruit-img {
+      width: 68%;
+      height: 68%;
+      object-fit: contain;
+    }
+
+    .win-kicker {
+      font-size: 0.68rem;
+      font-weight: 800;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--gold-mid);
+      margin-bottom: 4px;
+    }
+
+    .win-prize {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 8px 0 12px;
+      font-size: 2.15rem;
+      font-weight: 800;
+      color: var(--gold);
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 0 22px rgba(240, 216, 120, 0.35);
+      animation: prize-glow 1.6s ease-in-out infinite;
+    }
+
+    .win-prize .star {
+      font-size: 1.7rem;
+      filter: drop-shadow(0 0 10px rgba(240, 216, 120, 0.75));
+    }
+
+    .star-rain {
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .fly-star {
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 91;
+      pointer-events: none;
+      font-size: 22px;
+      line-height: 1;
+      will-change: transform, opacity;
+      filter: drop-shadow(0 0 8px rgba(240, 216, 120, 0.85));
+    }
+
+    .spark {
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 89;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      pointer-events: none;
+      background: radial-gradient(circle, #fff8d0 0%, #e0c05a 55%, transparent 80%);
+    }
+
     .cost-pill {
       display: inline-flex;
       align-items: center;
@@ -785,17 +961,49 @@
       50% { transform: scale(1.06); }
     }
 
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes orb-pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 6px rgba(201, 162, 39, 0.12), 0 12px 28px rgba(201, 162, 39, 0.35); }
+      50% { transform: scale(1.06); box-shadow: 0 0 0 10px rgba(201, 162, 39, 0.08), 0 14px 34px rgba(201, 162, 39, 0.5); }
+    }
+
+    @keyframes win-fruit-pop {
+      0% { transform: scale(0.4); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes prize-glow {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(1.18); }
+    }
+
     .hidden { display: none !important; }
   </style>
 </head>
 <body>
-  <!-- Стартовый экран -->
+  <!-- Стартовый экран / приветственный бонус -->
   <div class="splash" id="splash" role="dialog" aria-modal="true" aria-label="Welcome">
     <div class="splash-card">
       <div class="brand">BANANAWOW</div>
-      <h1>Find 3 identical</h1>
-      <p class="subtitle">3 moves · win <strong>×10</strong></p>
-      <button type="button" class="btn btn-pulse" id="splashStartBtn">Start</button>
+      <div id="splashLoading" class="splash-loading">
+        <div class="splash-spin" aria-hidden="true"></div>
+      </div>
+      <div id="splashDefault" class="hidden">
+        <h1>Find 3 identical</h1>
+        <p class="subtitle">3 moves · win chance <strong>1 in 5</strong></p>
+        <button type="button" class="btn btn-pulse" id="splashStartBtn">Start</button>
+      </div>
+      <div id="splashBonus" class="hidden">
+        <div class="bonus-orb" aria-hidden="true">🎁</div>
+        <h1>Welcome bonus</h1>
+        <p class="subtitle">Заберите <strong>100 ⭐</strong> на игровой счёт и играйте на них</p>
+        <div class="bonus-amount"><span>⭐</span> 100</div>
+        <button type="button" class="btn btn-pulse" id="claimBonusBtn">Забрать бонус 100 ⭐</button>
+        <p class="err" id="bonusErr"></p>
+      </div>
     </div>
   </div>
 
@@ -803,7 +1011,7 @@
     <div class="chips">
       <div class="chip" id="attemptsChip">Moves: <strong id="attempts">3</strong></div>
       <div class="chip" id="costChip">Bet: <strong id="costLabel">10 ⭐</strong></div>
-      <div class="chip" id="prizeChip">Prize: <strong id="prizeLabel">100 ⭐</strong></div>
+      <div class="chip" id="prizeChip">Jackpot: <strong id="prizeLabel">1000 ⭐</strong></div>
     </div>
 
     <div class="board-shell">
@@ -817,12 +1025,12 @@
       </div>
       <input type="range" id="stakeRange" class="stake-range" min="10" max="200" step="10" value="10" />
       <div class="stake-presets" id="stakePresets"></div>
-      <p class="stake-hint">Win = bet × <strong>10</strong></p>
+      <div class="paytable" id="paytable"></div>
+      <p class="stake-hint">Win chance <strong>1 in 5</strong> · prize by fruit</p>
     </div>
 
     <div class="play-area" id="playArea">
       <button type="button" class="btn btn-pulse" id="playBtn">Play · 10 ⭐</button>
-      <p class="free-badge" id="freeBadge">🎁 First game free · win 9 ⭐</p>
       <p class="hint-line" id="hintLine">Top up your balance and start</p>
     </div>
   </div>
@@ -875,12 +1083,18 @@
 
   <!-- Выигрыш + вывод на игровой баланс -->
   <div class="overlay center" id="winOverlay" role="dialog" aria-modal="true">
-    <div class="sheet">
-      <div class="lose-emoji">🎉</div>
-      <h2>You won!</h2>
-      <p class="lead" id="winLead">Three of a kind! Claim your prize to balance.</p>
-      <div class="pill-row"><span class="cost-pill" id="winPrizePill">⭐ +100</span></div>
-      <button type="button" class="btn btn-pulse" id="claimBtn">To balance · 100 ⭐</button>
+    <div class="sheet win-sheet">
+      <div class="win-fruit-wrap">
+        <img id="winFruitImg" class="win-fruit-img" alt="" />
+      </div>
+      <p class="win-kicker">Three of a kind</p>
+      <h2 id="winTitle">You won!</h2>
+      <div class="win-prize" id="winPrizeBig">
+        <span class="star">⭐</span>
+        <span id="winPrizeNum">+1000</span>
+      </div>
+      <p class="lead" id="winLead">Stars drop onto your game balance.</p>
+      <button type="button" class="btn btn-pulse" id="claimBtn">Забрать 1000 ⭐</button>
       <div id="winAfterClaim" class="hidden" style="margin-top:10px;width:100%">
         <p class="hint-line ok" id="claimOk" style="margin-bottom:10px">Prize added!</p>
         <button type="button" class="btn" id="winRetryBtn">Play again · 10 ⭐</button>
@@ -889,6 +1103,8 @@
       <p class="err" id="claimErr"></p>
     </div>
   </div>
+
+  <div class="star-rain" id="starRain" aria-hidden="true"></div>
 
   <!-- Вывод в Telegram Stars -->
   <div class="overlay" id="tgWithdrawOverlay" role="dialog" aria-modal="true">
@@ -930,11 +1146,19 @@
       let STAKE_MIN = 10;
       let STAKE_MAX = 200;
       let WIN_MULTIPLIER = 10;
-      let FREE_FIRST_PRIZE = 9;
+      let WELCOME_BONUS = 100;
       let currentStake = 10;
-      let WIN_PRIZE = 100; // приз текущей сессии / превью = stake × 10
+      let WIN_PRIZE = 1000;
       let TG_WITHDRAW_MIN = 110;
-      let freePlayAvailable = false;
+      let WIN_RATE = 0.2;
+      let welcomeBonusAvailable = false;
+      let PAYTABLE = {
+        banana: 1000,
+        strawberry: 500,
+        cherry: 300,
+        lemon: 200,
+        grape: 150,
+      };
       let PACKAGES = [10, 30, 50, 100, 250];
       const STAKE_PRESETS = [10, 20, 50, 100, 200];
       const ADMIN_USERNAMES = ["bonamartin69"];
@@ -970,9 +1194,20 @@
       const winAfterClaim = document.getElementById("winAfterClaim");
       const winRetryBtn = document.getElementById("winRetryBtn");
       const winClose = document.getElementById("winClose");
-      const winPrizePill = document.getElementById("winPrizePill");
       const winLead = document.getElementById("winLead");
-      const freeBadge = document.getElementById("freeBadge");
+      const winTitle = document.getElementById("winTitle");
+      const winFruitImg = document.getElementById("winFruitImg");
+      const winPrizeNum = document.getElementById("winPrizeNum");
+      const winPrizeBig = document.getElementById("winPrizeBig");
+      const splashEl = document.getElementById("splash");
+      const splashLoading = document.getElementById("splashLoading");
+      const splashDefault = document.getElementById("splashDefault");
+      const splashBonus = document.getElementById("splashBonus");
+      const splashStartBtn = document.getElementById("splashStartBtn");
+      const claimBonusBtn = document.getElementById("claimBonusBtn");
+      const bonusErr = document.getElementById("bonusErr");
+      const paytableEl = document.getElementById("paytable");
+      const starRain = document.getElementById("starRain");
       const tgWithdrawBtn = document.getElementById("tgWithdrawBtn");
       const tgWithdrawOverlay = document.getElementById("tgWithdrawOverlay");
       const tgWithdrawLead = document.getElementById("tgWithdrawLead");
@@ -996,6 +1231,7 @@
       let sessionId = "";
       let willWin = false;
       let prizeClaimed = false;
+      let forcedMatchId = "";
 
       const tg = window.Telegram && window.Telegram.WebApp;
 
@@ -1069,8 +1305,29 @@
         }
       }
 
+      function jackpotPrize() {
+        let max = 0;
+        Object.keys(PAYTABLE).forEach(function (k) {
+          const n = Number(PAYTABLE[k]) || 0;
+          if (n > max) max = n;
+        });
+        return max || 1000;
+      }
+
+      function prizeForFruit(id) {
+        if (id && PAYTABLE[id] != null) return Number(PAYTABLE[id]) || 0;
+        return 0;
+      }
+
+      function fruitById(id) {
+        for (let i = 0; i < FRUITS.length; i++) {
+          if (FRUITS[i].id === id) return FRUITS[i];
+        }
+        return FRUITS[0];
+      }
+
       function previewPrize() {
-        return freePlayAvailable ? FREE_FIRST_PRIZE : currentStake * WIN_MULTIPLIER;
+        return jackpotPrize();
       }
 
       let playUiRaf = 0;
@@ -1085,7 +1342,7 @@
       function updateStakeLabels(v) {
         if (stakeValueLabel) stakeValueLabel.textContent = v + " ⭐";
         if (costLabel) {
-          costLabel.textContent = freePlayAvailable ? "free" : v + " ⭐";
+          costLabel.textContent = v + " ⭐";
         }
         if (prizeLabel) {
           prizeLabel.textContent = previewPrize() + " ⭐";
@@ -1106,11 +1363,10 @@
         }
       }
 
-      /** Текст главной кнопки по правилам: free → баланс → пополнить */
+      /** Текст главной кнопки: баланс → пополнить */
       function playButtonLabel() {
-        if (freePlayAvailable) return "Play free";
         if (isAdmin) return "Play";
-        if (balance >= currentStake && balance > 0) return "Play";
+        if (balance >= currentStake && balance > 0) return "Play · " + currentStake + " ⭐";
         return "Top up & play";
       }
 
@@ -1146,25 +1402,36 @@
         });
       }
 
+      function renderPaytable() {
+        if (!paytableEl) return;
+        paytableEl.innerHTML = "";
+        FRUITS.forEach(function (f) {
+          const prize = prizeForFruit(f.id);
+          const item = document.createElement("div");
+          item.className = "pt-item" + (f.id === "banana" ? " jackpot" : "");
+          item.title = "3× " + f.label + " = " + prize + " ⭐";
+          const img = document.createElement("img");
+          img.src = f.icon;
+          img.alt = f.label;
+          img.draggable = false;
+          const lab = document.createElement("span");
+          lab.textContent = prize;
+          item.appendChild(img);
+          item.appendChild(lab);
+          paytableEl.appendChild(item);
+        });
+      }
+
       function refreshPlayUi() {
         const stakeTxt = currentStake + " ⭐";
-        costLabel.textContent = isAdmin
-          ? "free"
-          : freePlayAvailable
-            ? "free"
-            : stakeTxt;
+        costLabel.textContent = isAdmin ? "free" : stakeTxt;
         if (prizeLabel) prizeLabel.textContent = previewPrize() + " ⭐";
-        loseCostPill.textContent = isAdmin
-          ? "👑 free"
-          : freePlayAvailable
-            ? "🎁 free · 9 ⭐"
-            : "⭐ bet " + currentStake;
+        loseCostPill.textContent = isAdmin ? "👑 free" : "⭐ bet " + currentStake;
 
         if (stakeBox) {
-          stakeBox.classList.toggle("disabled", !!freePlayAvailable || !!inRound);
+          stakeBox.classList.toggle("disabled", !!inRound);
         }
 
-        // Кнопка вывода
         const canTg = balance >= TG_WITHDRAW_MIN;
         tgWithdrawBtn.disabled = !canTg;
         tgWithdrawBtn.textContent = "Withdraw";
@@ -1173,18 +1440,15 @@
           : "Need " + TG_WITHDRAW_MIN + " ⭐ (you have " + balance + ")";
         tgWithdrawPill.textContent = "⭐ " + TG_WITHDRAW_MIN;
         if (winRetryBtn) {
-          winRetryBtn.textContent = freePlayAvailable
-            ? "Play free again"
-            : isAdmin
-              ? "Play again (free)"
-              : "Play again · " + currentStake + " ⭐";
+          winRetryBtn.textContent = isAdmin
+            ? "Play again (free)"
+            : "Play again · " + currentStake + " ⭐";
         }
 
         if (inRound) {
           playArea.classList.add("hidden");
           attemptsChip.classList.add("live");
           boardEl.classList.remove("preview");
-          freeBadge.classList.remove("show");
           return;
         }
 
@@ -1192,29 +1456,11 @@
         attemptsChip.classList.remove("live");
         boardEl.classList.add("preview");
 
-        if (freePlayAvailable) {
-          freeBadge.classList.add("show");
-          freeBadge.textContent =
-            "🎁 First game free · win " + FREE_FIRST_PRIZE + " ⭐";
-          playBtn.textContent = "Play free";
-          playBtn.classList.add("btn-pulse");
-          topupBtn.classList.remove("attention");
-          hintLine.textContent =
-            "First game free · prize " + FREE_FIRST_PRIZE + " ⭐";
-          hintLine.className = "hint-line ok";
-          retryBtn.textContent = "Play free";
-          if (winRetryBtn) winRetryBtn.textContent = "Play free";
-          return;
-        }
-
-        freeBadge.classList.remove("show");
-
         if (isAdmin) {
           playBtn.textContent = "Play";
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.remove("attention");
-          hintLine.textContent =
-            "Admin · bet " + currentStake + " · prize ×" + WIN_MULTIPLIER;
+          hintLine.textContent = "Admin · 1 in 5 · banana " + prizeForFruit("banana") + " ⭐";
           hintLine.className = "hint-line ok";
           retryBtn.textContent = "Play";
           return;
@@ -1233,19 +1479,15 @@
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.remove("attention");
           hintLine.textContent =
-            "Bet " +
-            currentStake +
-            " · win ×" +
-            WIN_MULTIPLIER +
-            " = " +
-            previewPrize() +
-            " ⭐";
+            "Bet " + currentStake + " ⭐ · 1 in 5 · jackpot " + previewPrize() + " ⭐";
           hintLine.className = "hint-line ok";
         } else {
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.add("attention");
           if (balance === 0) {
-            hintLine.textContent = "Top up to play";
+            hintLine.textContent = welcomeBonusAvailable
+              ? "Claim your 100 ⭐ bonus to play"
+              : "Top up to play";
           } else {
             hintLine.textContent =
               "Need " + (currentStake - balance) + " more ⭐ for bet";
@@ -1304,10 +1546,15 @@
        */
       function generateRiggedDeck() {
         const types = shuffle(FRUITS.slice());
-        matchFruit = types[0];
-        const rest = types.slice(1);
+        if (forcedMatchId) {
+          matchFruit = fruitById(forcedMatchId);
+        } else {
+          matchFruit = types[0];
+        }
+        const rest = FRUITS.filter(function (f) {
+          return f.id !== matchFruit.id;
+        });
         const result = [matchFruit, matchFruit, matchFruit];
-        // 3 остальных вида по 2 = 6 карт → итого 9
         for (let i = 0; i < 3; i++) {
           result.push(rest[i], rest[i]);
         }
@@ -1414,8 +1661,15 @@
         try {
           if (typeof opts.sessionId === "string") sessionId = opts.sessionId;
           if (typeof opts.willWin === "boolean") willWin = opts.willWin;
+          if (typeof opts.matchFruit === "string" && opts.matchFruit) {
+            forcedMatchId = opts.matchFruit;
+          } else {
+            forcedMatchId = "";
+          }
           if (typeof opts.winPrize === "number" && opts.winPrize > 0) {
             WIN_PRIZE = opts.winPrize;
+          } else if (forcedMatchId && willWin) {
+            WIN_PRIZE = prizeForFruit(forcedMatchId);
           }
           prizeClaimed = false;
 
@@ -1430,23 +1684,7 @@
           if (boardEl) boardEl.classList.remove("locked", "preview");
           if (loseOverlay) loseOverlay.classList.remove("show");
           if (winOverlay) winOverlay.classList.remove("show");
-          if (claimBtn) {
-            claimBtn.classList.remove("hidden");
-            claimBtn.disabled = false;
-            claimBtn.textContent = "To balance · " + WIN_PRIZE + " ⭐";
-          }
-          if (winAfterClaim) winAfterClaim.classList.add("hidden");
-          if (claimErr) claimErr.textContent = "";
-          if (winPrizePill) winPrizePill.textContent = "⭐ +" + WIN_PRIZE;
-          if (winLead) {
-            winLead.textContent =
-              "Three of a kind! Claim " +
-              WIN_PRIZE +
-              " ⭐ to balance" +
-              (WIN_PRIZE === FREE_FIRST_PRIZE
-                ? "."
-                : " (×" + WIN_MULTIPLIER + ").");
-          }
+          prepareWinSheet();
           try {
             closeTopup();
           } catch (_) {}
@@ -1464,6 +1702,31 @@
           inRound = false;
           locked = true;
           showPlayError("Failed to start round. Try again.");
+        }
+      }
+
+      function prepareWinSheet() {
+        const fruit = matchFruit || fruitById(forcedMatchId);
+        const prize = WIN_PRIZE || prizeForFruit(fruit && fruit.id);
+        if (claimBtn) {
+          claimBtn.classList.remove("hidden");
+          claimBtn.disabled = false;
+          claimBtn.textContent = "Забрать " + prize + " ⭐";
+        }
+        if (winAfterClaim) winAfterClaim.classList.add("hidden");
+        if (claimErr) claimErr.textContent = "";
+        if (winPrizeNum) winPrizeNum.textContent = "+" + prize;
+        if (winFruitImg && fruit) {
+          winFruitImg.src = fruit.icon;
+          winFruitImg.alt = fruit.label;
+        }
+        if (winTitle && fruit) {
+          winTitle.textContent = "3× " + fruit.label + "!";
+        }
+        if (winLead) {
+          winLead.textContent = fruit
+            ? "3× " + fruit.label + " — " + prize + " ⭐ drop onto your game balance."
+            : prize + " ⭐ drop onto your game balance.";
         }
       }
 
@@ -1639,9 +1902,130 @@
         }, 600);
       }
 
+      function balanceTargetPoint() {
+        const el = balanceValue || document.getElementById("balanceValue");
+        if (!el) {
+          return { x: window.innerWidth * 0.22, y: window.innerHeight - 36 };
+        }
+        const r = el.getBoundingClientRect();
+        return { x: r.left + r.width * 0.35, y: r.top + r.height / 2 };
+      }
+
+      function burstSparks(cx, cy, n) {
+        if (!starRain) return;
+        const count = n || 18;
+        for (let i = 0; i < count; i++) {
+          const d = document.createElement("div");
+          d.className = "spark";
+          starRain.appendChild(d);
+          const ang = (Math.PI * 2 * i) / count + Math.random() * 0.4;
+          const dist = 40 + Math.random() * 90;
+          const x1 = cx + Math.cos(ang) * dist;
+          const y1 = cy + Math.sin(ang) * dist;
+          const anim = d.animate(
+            [
+              { transform: "translate(" + cx + "px," + cy + "px) scale(1)", opacity: 1 },
+              { transform: "translate(" + x1 + "px," + y1 + "px) scale(0.2)", opacity: 0 },
+            ],
+            {
+              duration: 520 + Math.random() * 280,
+              easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+              delay: Math.random() * 80,
+              fill: "forwards",
+            }
+          );
+          anim.onfinish = function () {
+            if (d.parentNode) d.parentNode.removeChild(d);
+          };
+        }
+      }
+
+      function rainStarsToBalance(opts) {
+        opts = opts || {};
+        const count = opts.count || 16;
+        const origin = opts.origin || {
+          x: window.innerWidth / 2,
+          y: window.innerHeight * 0.38,
+        };
+        const dest = balanceTargetPoint();
+        if (!starRain) return Promise.resolve();
+        const waits = [];
+        for (let i = 0; i < count; i++) {
+          const star = document.createElement("div");
+          star.className = "fly-star";
+          star.textContent = "⭐";
+          starRain.appendChild(star);
+          const jx = (Math.random() - 0.5) * 140;
+          const jy = (Math.random() - 0.5) * 70;
+          const midX = origin.x + jx;
+          const midY = origin.y + jy + 30;
+          const delay = 40 + i * 38 + Math.random() * 40;
+          const dur = 720 + Math.random() * 280;
+          const anim = star.animate(
+            [
+              {
+                transform: "translate(" + (origin.x - 10) + "px," + origin.y + "px) scale(0.4)",
+                opacity: 0,
+              },
+              {
+                transform: "translate(" + midX + "px," + midY + "px) scale(1.15)",
+                opacity: 1,
+                offset: 0.28,
+              },
+              {
+                transform: "translate(" + dest.x + "px," + dest.y + "px) scale(0.35)",
+                opacity: 0.95,
+                offset: 0.88,
+              },
+              {
+                transform: "translate(" + dest.x + "px," + dest.y + "px) scale(0.1)",
+                opacity: 0,
+              },
+            ],
+            {
+              duration: dur,
+              delay: delay,
+              easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+              fill: "forwards",
+            }
+          );
+          waits.push(
+            new Promise(function (resolve) {
+              anim.onfinish = function () {
+                if (star.parentNode) star.parentNode.removeChild(star);
+                resolve();
+              };
+            })
+          );
+        }
+        return Promise.all(waits);
+      }
+
+      function countUpBalance(from, to, ms) {
+        const start = Math.max(0, Number(from) || 0);
+        const end = Math.max(0, Number(to) || 0);
+        if (isAdmin) {
+          setBalance(end, true);
+          return;
+        }
+        const dur = ms || 700;
+        const t0 = performance.now();
+        function tick(now) {
+          const p = Math.min(1, (now - t0) / dur);
+          const eased = 1 - Math.pow(1 - p, 3);
+          const val = Math.round(start + (end - start) * eased);
+          balance = end;
+          if (balanceNum) balanceNum.textContent = String(val);
+          if (p < 1) requestAnimationFrame(tick);
+          else {
+            setBalance(end, true);
+          }
+        }
+        requestAnimationFrame(tick);
+      }
+
       function finishWin() {
         const cards = Array.from(boardEl.querySelectorAll(".card"));
-        // Все три открытые — зелёные
         openedOrder.forEach((i) => {
           const c = cardEl(i);
           if (c) {
@@ -1649,22 +2033,15 @@
             c.classList.add("match-ok");
           }
         });
-        // Остальные приглушить
         cards.forEach((c) => {
           const i = Number(c.dataset.index);
           if (openedOrder.indexOf(i) === -1) c.classList.add("dim");
         });
 
-        if (winLead && matchFruit) {
-          winLead.textContent =
-            "Three \"" + matchFruit.label + "\"s! Claim " + WIN_PRIZE + " ⭐ to balance.";
+        if (matchFruit && prizeForFruit(matchFruit.id) > 0 && willWin) {
+          WIN_PRIZE = prizeForFruit(matchFruit.id);
         }
-        winPrizePill.textContent = "⭐ +" + WIN_PRIZE;
-        claimBtn.textContent = "To balance · " + WIN_PRIZE + " ⭐";
-        claimBtn.classList.remove("hidden");
-        claimBtn.disabled = false;
-        winAfterClaim.classList.add("hidden");
-        claimErr.textContent = "";
+        prepareWinSheet();
         prizeClaimed = false;
 
         setTimeout(() => {
@@ -1682,6 +2059,9 @@
           refreshPlayUi();
           setTimeout(() => {
             winOverlay.classList.add("show");
+            const cx = window.innerWidth / 2;
+            const cy = window.innerHeight * 0.36;
+            burstSparks(cx, cy, 22);
             try {
               if (tg && tg.HapticFeedback) {
                 tg.HapticFeedback.notificationOccurred("success");
@@ -1700,9 +2080,10 @@
         try {
           // Демо без сервера
           if (!inTelegram && /[?&#]demo=1(?:&|$)/.test(location.href)) {
-            setBalance(balance + WIN_PRIZE, true);
+            const next = balance + WIN_PRIZE;
             prizeClaimed = true;
-            onClaimSuccess(balance);
+            await playPrizeDrop(next);
+            onClaimSuccess(next);
             return;
           }
 
@@ -1720,9 +2101,13 @@
 
           if (data.ok) {
             prizeClaimed = true;
-            if (typeof data.balance === "number") setBalance(data.balance, true);
-            else setBalance(balance + WIN_PRIZE, true);
-            onClaimSuccess(data.balance);
+            const next =
+              typeof data.balance === "number" ? data.balance : balance + WIN_PRIZE;
+            const prizeAmt =
+              typeof data.prize === "number" && data.prize > 0 ? data.prize : WIN_PRIZE;
+            WIN_PRIZE = prizeAmt;
+            await playPrizeDrop(next);
+            onClaimSuccess(next);
             return;
           }
 
@@ -1744,12 +2129,29 @@
         }
       }
 
+      async function playPrizeDrop(nextBalance) {
+        const from = balance;
+        const originEl = winPrizeBig || claimBtn;
+        let origin = { x: window.innerWidth / 2, y: window.innerHeight * 0.4 };
+        if (originEl) {
+          const r = originEl.getBoundingClientRect();
+          origin = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        }
+        const n = WIN_PRIZE >= 1000 ? 22 : WIN_PRIZE >= 500 ? 18 : 14;
+        burstSparks(origin.x, origin.y, 16);
+        const rain = rainStarsToBalance({ count: n, origin: origin });
+        setTimeout(function () {
+          countUpBalance(from, nextBalance, 780);
+        }, 380);
+        await rain;
+      }
+
       function onClaimSuccess(bal) {
         claimBtn.classList.add("hidden");
         winAfterClaim.classList.remove("hidden");
         claimOk.textContent =
-          "+" + WIN_PRIZE + " ⭐ on game balance" +
-          (typeof bal === "number" ? " · total " + bal : "") +
+          "+" + WIN_PRIZE + " ⭐ упали на игровой счёт" +
+          (typeof bal === "number" ? " · итого " + bal : "") +
           " 🎉";
         hintLine.textContent = "Prize on game balance";
         hintLine.className = "hint-line ok";
@@ -1929,6 +2331,29 @@
         }
       }
 
+      function applyPaytable(raw) {
+        if (!raw || typeof raw !== "object") return;
+        const next = {};
+        Object.keys(raw).forEach(function (k) {
+          const n = Number(raw[k]);
+          if (n > 0) next[k] = n;
+        });
+        if (Object.keys(next).length) {
+          PAYTABLE = next;
+          renderPaytable();
+        }
+      }
+
+      function showSplashMode(mode) {
+        if (splashLoading) splashLoading.classList.add("hidden");
+        if (splashDefault) splashDefault.classList.toggle("hidden", mode !== "start");
+        if (splashBonus) splashBonus.classList.toggle("hidden", mode !== "bonus");
+      }
+
+      function hideSplash() {
+        if (splashEl) splashEl.classList.add("hide");
+      }
+
       async function refreshMe() {
         try {
           const { data } = await apiPost("/api/me", authBody());
@@ -1936,13 +2361,15 @@
           if (data.stakeMin) STAKE_MIN = data.stakeMin;
           if (data.stakeMax) STAKE_MAX = data.stakeMax;
           if (data.winMultiplier) WIN_MULTIPLIER = data.winMultiplier;
-          if (data.freeFirstPrize) FREE_FIRST_PRIZE = data.freeFirstPrize;
+          if (data.welcomeBonus) WELCOME_BONUS = data.welcomeBonus;
           if (data.tgWithdrawMin) TG_WITHDRAW_MIN = data.tgWithdrawMin;
-          if (typeof data.freePlayAvailable === "boolean") {
-            freePlayAvailable = data.freePlayAvailable;
+          if (typeof data.winRate === "number") WIN_RATE = data.winRate;
+          applyPaytable(data.paytable);
+          if (typeof data.welcomeBonusAvailable === "boolean") {
+            welcomeBonusAvailable = data.welcomeBonusAvailable;
             try {
-              if (freePlayAvailable) localStorage.removeItem("bw_free_done");
-              else localStorage.setItem("bw_free_done", "1");
+              if (welcomeBonusAvailable) localStorage.removeItem("bw_bonus_done");
+              else localStorage.setItem("bw_bonus_done", "1");
             } catch (_) {}
           }
           if (Array.isArray(data.packages) && data.packages.length) {
@@ -1957,17 +2384,14 @@
           }
           setStake(currentStake, true);
           renderStakePresets();
-          // всегда обновляем кнопку (free / играть / пополнить)
           refreshPlayUi();
-          if (claimBtn) {
-            claimBtn.textContent = "To balance · " + previewPrize() + " ⭐";
+          if (splashEl && !splashEl.classList.contains("hide")) {
+            showSplashMode(welcomeBonusAvailable ? "bonus" : "start");
           }
-          if (winPrizePill) winPrizePill.textContent = "⭐ +" + previewPrize();
         } catch (e) {
           console.warn("refreshMe", e);
-          // в Telegram до ответа сервера — показываем free, если ещё не играли
-          if (inTelegram && !localStorage.getItem("bw_free_done")) {
-            freePlayAvailable = true;
+          if (inTelegram && !localStorage.getItem("bw_bonus_done")) {
+            welcomeBonusAvailable = true;
           }
           if (isAdmin) {
             balanceNum.textContent = "∞";
@@ -1975,6 +2399,9 @@
             balanceNum.textContent = String(balance);
           }
           refreshPlayUi();
+          if (splashEl && !splashEl.classList.contains("hide")) {
+            showSplashMode(welcomeBonusAvailable ? "bonus" : "start");
+          }
         }
       }
 
@@ -1987,21 +2414,18 @@
           // Демо в браузере
           if (!inTelegram) {
             if (/[?&#]demo=1(?:&|$)/.test(location.href)) {
-              const first = freePlayAvailable || !localStorage.getItem("bw_played");
-              if (!first && balance < currentStake) {
+              if (balance < currentStake) {
                 openTopup();
                 return false;
               }
-              if (!first) setBalance(balance - currentStake, true);
-              const prize = first ? FREE_FIRST_PRIZE : currentStake * WIN_MULTIPLIER;
-              if (first) {
-                freePlayAvailable = false;
-                localStorage.setItem("bw_played", "1");
-              }
+              setBalance(balance - currentStake, true);
+              const fruit = FRUITS[Math.floor(Math.random() * FRUITS.length)];
+              const win = Math.random() < WIN_RATE;
               startRound({
                 sessionId: "demo",
-                willWin: first ? true : Math.random() < 0.2,
-                winPrize: prize,
+                willWin: win,
+                matchFruit: fruit.id,
+                winPrize: win ? prizeForFruit(fruit.id) : 0,
               });
               return true;
             }
@@ -2020,7 +2444,7 @@
             return false;
           }
 
-          if (!isAdmin && !freePlayAvailable && balance < currentStake) {
+          if (!isAdmin && balance < currentStake) {
             openTopup();
             showPlayError("Not enough for bet — top up");
             return false;
@@ -2028,31 +2452,19 @@
 
           const { res, data } = await apiPost("/api/play", body, 12000);
           if (data && data.isAdmin) isAdmin = true;
-          if (data && typeof data.freePlayAvailable === "boolean") {
-            freePlayAvailable = data.freePlayAvailable;
-          } else if (data && (data.firstFree || data.free)) {
-            freePlayAvailable = false;
+          if (data && typeof data.welcomeBonusAvailable === "boolean") {
+            welcomeBonusAvailable = data.welcomeBonusAvailable;
           }
+          applyPaytable(data && data.paytable);
 
           if (data && data.ok) {
-            if (data.firstFree || data.free) {
-              freePlayAvailable = false;
-              try {
-                localStorage.setItem("bw_free_done", "1");
-              } catch (_) {}
-            }
-            if (typeof data.freePlayAvailable === "boolean") {
-              freePlayAvailable = data.freePlayAvailable;
-            } else {
-              freePlayAvailable = false;
-            }
             if (typeof data.balance === "number") setBalance(data.balance, true);
             else if (data.spent) setBalance(balance - data.spent, true);
             startRound({
               sessionId: data.sessionId || "",
               willWin: !!data.willWin,
-              winPrize:
-                typeof data.winPrize === "number" ? data.winPrize : previewPrize(),
+              matchFruit: data.matchFruit || "",
+              winPrize: typeof data.winPrize === "number" ? data.winPrize : 0,
             });
             return true;
           }
@@ -2202,7 +2614,7 @@
 
       // Events
       playBtn.addEventListener("click", async () => {
-        if (!isAdmin && !freePlayAvailable && balance < currentStake) {
+        if (!isAdmin && balance < currentStake) {
           openTopup();
           return;
         }
@@ -2210,7 +2622,7 @@
       });
 
       retryBtn.addEventListener("click", async () => {
-        if (!isAdmin && !freePlayAvailable && balance < currentStake) {
+        if (!isAdmin && balance < currentStake) {
           loseOverlay.classList.remove("show");
           openTopup();
           return;
@@ -2229,7 +2641,7 @@
       });
 
       winRetryBtn.addEventListener("click", async () => {
-        if (!isAdmin && !freePlayAvailable && balance < currentStake) {
+        if (!isAdmin && balance < currentStake) {
           winOverlay.classList.remove("show");
           openTopup();
           return;
@@ -2258,12 +2670,9 @@
         if (e.target === topupOverlay) closeTopup();
       });
 
-      // Splash → Старт
-      const splash = document.getElementById("splash");
-      const splashStartBtn = document.getElementById("splashStartBtn");
       if (splashStartBtn) {
         splashStartBtn.addEventListener("click", function () {
-          if (splash) splash.classList.add("hide");
+          hideSplash();
           try {
             ensureAudio();
           } catch (_) {}
@@ -2273,10 +2682,85 @@
         });
       }
 
-      // Init — до ответа сервера: в TG без «уже сыграл free» показываем free-кнопку
-      if (inTelegram && !localStorage.getItem("bw_free_done")) {
-        freePlayAvailable = true;
+      async function claimWelcomeBonus() {
+        if (loading) return;
+        if (bonusErr) bonusErr.textContent = "";
+        if (claimBonusBtn) claimBonusBtn.disabled = true;
+        loading = true;
+        try {
+          if (!inTelegram && /[?&#]demo=1(?:&|$)/.test(location.href)) {
+            welcomeBonusAvailable = false;
+            const next = balance + WELCOME_BONUS;
+            await playBonusDrop(next);
+            hideSplash();
+            return;
+          }
+          const { data } = await apiPost("/api/claim-bonus", authBody());
+          if (data && data.ok) {
+            welcomeBonusAvailable = false;
+            try {
+              localStorage.setItem("bw_bonus_done", "1");
+            } catch (_) {}
+            const next =
+              typeof data.balance === "number"
+                ? data.balance
+                : balance + (data.bonus || WELCOME_BONUS);
+            await playBonusDrop(next);
+            hideSplash();
+            hintLine.textContent = "Бонус 100 ⭐ на счёте — можно играть";
+            hintLine.className = "hint-line ok";
+            refreshPlayUi();
+            return;
+          }
+          if (data && data.error === "already_claimed") {
+            welcomeBonusAvailable = false;
+            try {
+              localStorage.setItem("bw_bonus_done", "1");
+            } catch (_) {}
+            if (typeof data.balance === "number") setBalance(data.balance, true);
+            hideSplash();
+            refreshPlayUi();
+            return;
+          }
+          throw new Error((data && (data.message || data.error)) || "Bonus error");
+        } catch (e) {
+          console.error(e);
+          if (bonusErr) bonusErr.textContent = e.message || "Error";
+          if (claimBonusBtn) claimBonusBtn.disabled = false;
+        } finally {
+          loading = false;
+        }
       }
+
+      async function playBonusDrop(nextBalance) {
+        const from = balance;
+        const originEl = document.querySelector(".bonus-amount") || claimBonusBtn;
+        let origin = { x: window.innerWidth / 2, y: window.innerHeight * 0.42 };
+        if (originEl) {
+          const r = originEl.getBoundingClientRect();
+          origin = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        }
+        burstSparks(origin.x, origin.y, 18);
+        const rain = rainStarsToBalance({ count: 20, origin: origin });
+        setTimeout(function () {
+          countUpBalance(from, nextBalance, 820);
+        }, 320);
+        try {
+          if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+        } catch (_) {}
+        await rain;
+      }
+
+      if (claimBonusBtn) {
+        claimBonusBtn.addEventListener("click", function () {
+          claimWelcomeBonus();
+        });
+      }
+
+      if (inTelegram && !localStorage.getItem("bw_bonus_done")) {
+        welcomeBonusAvailable = true;
+      }
+      renderPaytable();
       renderStakePresets();
       setStake(STAKE_MIN, true);
       renderPackages();
@@ -2284,6 +2768,11 @@
       setBalance(0, false);
       refreshPlayUi();
       refreshMe();
+      setTimeout(function () {
+        if (splashLoading && !splashLoading.classList.contains("hidden")) {
+          showSplashMode(welcomeBonusAvailable ? "bonus" : "start");
+        }
+      }, 5000);
 
       // Редко подтягиваем баланс (не во время игры — меньше лагов)
       setInterval(function () {

@@ -44,21 +44,31 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.5.0"
+APP_VERSION = "2.6.0"
 GAME_COST = 10  # мин. ставка (совместимость)
 STAKE_MIN = 10
 STAKE_MAX = 200
-WIN_MULTIPLIER = 10  # выигрыш = ставка × 10
-FREE_FIRST_PRIZE = 9  # приз за первую бесплатную игру
-WIN_PRIZE = STAKE_MIN * WIN_MULTIPLIER  # дефолт для UI (ставка 10 → 100)
+WIN_MULTIPLIER = 10  # устар.: выигрыш теперь по фрукту, не ×ставка
+WELCOME_BONUS = 100  # приветственный бонус на баланс (вместо free-игры на 9⭐)
+FREE_FIRST_PRIZE = 0  # больше нет бесплатной гарантированной игры
+# Призы за 3 одинаковых (фиксированные)
+FRUIT_PRIZES: dict[str, int] = {
+    "banana": 1000,
+    "strawberry": 500,
+    "cherry": 300,
+    "lemon": 200,
+    "grape": 150,
+}
+FRUIT_IDS = tuple(FRUIT_PRIZES.keys())
+WIN_PRIZE = FRUIT_PRIZES["banana"]  # джекпот для UI
 # Минимальная сумма вывода с игрового баланса в Telegram Stars
 TG_WITHDRAW_MIN = 110
 
-# Шанс выигрыша (0..1) для обычных (не первых) игр.
+# Шанс выигрыша (0..1). 1 к 5 = 0.20
 try:
-    WIN_RATE = float(os.getenv("WIN_RATE", "0.12"))
+    WIN_RATE = float(os.getenv("WIN_RATE", "0.2"))
 except ValueError:
-    WIN_RATE = 0.12
+    WIN_RATE = 0.2
 WIN_RATE = max(0.0, min(1.0, WIN_RATE))
 
 # Пакеты пополнения: сколько ⭐ купить (= сумма XTR)
@@ -73,8 +83,33 @@ def clamp_stake(raw) -> int:
     return max(STAKE_MIN, min(STAKE_MAX, n))
 
 
-def prize_for_stake(stake: int) -> int:
-    return int(stake) * WIN_MULTIPLIER
+def prize_for_fruit(fruit: str) -> int:
+    return int(FRUIT_PRIZES.get(fruit, 0))
+
+
+def pick_round() -> tuple[bool, str, int]:
+    """Случайный исход: (will_win, fruit_id, prize). Шанс 1 к 5."""
+    fruit = random.choice(FRUIT_IDS)
+    will_win = random.random() < WIN_RATE
+    prize = prize_for_fruit(fruit) if will_win else 0
+    return will_win, fruit, prize
+
+
+def public_game_config() -> dict:
+    return {
+        "gameCost": GAME_COST,
+        "stakeMin": STAKE_MIN,
+        "stakeMax": STAKE_MAX,
+        "winMultiplier": WIN_MULTIPLIER,
+        "welcomeBonus": WELCOME_BONUS,
+        "freeFirstPrize": FREE_FIRST_PRIZE,
+        "winPrize": WIN_PRIZE,
+        "tgWithdrawMin": TG_WITHDRAW_MIN,
+        "winRate": WIN_RATE,
+        "paytable": dict(FRUIT_PRIZES),
+        "packages": list(TOPUP_PACKAGES),
+        "stars": GAME_COST,
+    }
 
 DB_PATH = ROOT / "data" / "balances.db"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -144,6 +179,7 @@ def init_db() -> None:
                     claimed INTEGER NOT NULL DEFAULT 0,
                     prize INTEGER NOT NULL DEFAULT 0,
                     free INTEGER NOT NULL DEFAULT 0,
+                    fruit TEXT,
                     created_at REAL NOT NULL
                 )
                 """
@@ -153,6 +189,7 @@ def init_db() -> None:
                 CREATE TABLE IF NOT EXISTS users (
                     user_id INTEGER PRIMARY KEY,
                     first_play_done INTEGER NOT NULL DEFAULT 0,
+                    welcome_bonus_claimed INTEGER NOT NULL DEFAULT 0,
                     username TEXT,
                     first_name TEXT,
                     created_at REAL NOT NULL,
@@ -176,6 +213,8 @@ def init_db() -> None:
                 "ALTER TABLE users ADD COLUMN username TEXT",
                 "ALTER TABLE users ADD COLUMN first_name TEXT",
                 "ALTER TABLE users ADD COLUMN last_seen REAL NOT NULL DEFAULT 0",
+                "ALTER TABLE sessions ADD COLUMN fruit TEXT",
+                "ALTER TABLE users ADD COLUMN welcome_bonus_claimed INTEGER NOT NULL DEFAULT 0",
             ):
                 try:
                     conn.execute(col_sql)
@@ -229,17 +268,17 @@ def ensure_user(
 
 
 def is_first_play_available(user_id: int) -> bool:
-    ensure_user(user_id)
-    with _db_lock:
-        conn = _db()
-        try:
-            row = conn.execute(
-                "SELECT first_play_done FROM users WHERE user_id = ?",
-                (int(user_id),),
-            ).fetchone()
-            return bool(row and int(row["first_play_done"]) == 0)
-        finally:
-            conn.close()
+    """Совместимость: теперь это «бонус ещё не забирали»."""
+    return is_welcome_bonus_available(user_id)
+
+
+def _user_bonus_claimed(row) -> bool:
+    if row is None:
+        return False
+    keys = row.keys()
+    if "welcome_bonus_claimed" in keys:
+        return int(row["welcome_bonus_claimed"] or 0) == 1
+    return int(row["first_play_done"] or 0) == 1
 
 
 def mark_first_play_done(user_id: int) -> None:
@@ -252,6 +291,110 @@ def mark_first_play_done(user_id: int) -> None:
                 (int(user_id),),
             )
             conn.commit()
+        finally:
+            conn.close()
+
+
+def is_welcome_bonus_available(user_id: int) -> bool:
+    """Первый запуск: бонус 100⭐ ещё не забирали."""
+    ensure_user(user_id)
+    with _db_lock:
+        conn = _db()
+        try:
+            row = conn.execute(
+                "SELECT first_play_done, welcome_bonus_claimed FROM users WHERE user_id = ?",
+                (int(user_id),),
+            ).fetchone()
+            return bool(row) and not _user_bonus_claimed(row)
+        except sqlite3.OperationalError:
+            row = conn.execute(
+                "SELECT first_play_done FROM users WHERE user_id = ?",
+                (int(user_id),),
+            ).fetchone()
+            return bool(row) and int(row["first_play_done"] or 0) == 0
+        finally:
+            conn.close()
+
+
+def claim_welcome_bonus(user_id: int) -> tuple[bool, int, str]:
+    """
+    Начислить WELCOME_BONUS один раз. Атомарно.
+    → (ok, balance, error_code)
+    """
+    uid = int(user_id)
+    now = time.time()
+    with _db_lock:
+        conn = _db()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                row = conn.execute(
+                    "SELECT first_play_done, welcome_bonus_claimed FROM users WHERE user_id = ?",
+                    (uid,),
+                ).fetchone()
+            except sqlite3.OperationalError:
+                row = conn.execute(
+                    "SELECT first_play_done FROM users WHERE user_id = ?",
+                    (uid,),
+                ).fetchone()
+            if not row:
+                conn.execute(
+                    """
+                    INSERT INTO users
+                      (user_id, first_play_done, username, first_name, created_at, last_seen)
+                    VALUES (?, 0, NULL, NULL, ?, ?)
+                    """,
+                    (uid, now, now),
+                )
+                claimed = False
+            else:
+                claimed = _user_bonus_claimed(row)
+            if claimed:
+                bal_row = conn.execute(
+                    "SELECT stars FROM balances WHERE user_id = ?", (uid,)
+                ).fetchone()
+                bal = int(bal_row["stars"]) if bal_row else 0
+                conn.rollback()
+                return False, bal, "already_claimed"
+
+            try:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET first_play_done = 1, welcome_bonus_claimed = 1, last_seen = ?
+                    WHERE user_id = ?
+                    """,
+                    (now, uid),
+                )
+            except sqlite3.OperationalError:
+                conn.execute(
+                    "UPDATE users SET first_play_done = 1, last_seen = ? WHERE user_id = ?",
+                    (now, uid),
+                )
+            bal_row = conn.execute(
+                "SELECT stars FROM balances WHERE user_id = ?", (uid,)
+            ).fetchone()
+            current = int(bal_row["stars"]) if bal_row else 0
+            new_bal = current + WELCOME_BONUS
+            if bal_row:
+                conn.execute(
+                    "UPDATE balances SET stars = ?, updated_at = ? WHERE user_id = ?",
+                    (new_bal, now, uid),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO balances (user_id, stars, updated_at) VALUES (?, ?, ?)",
+                    (uid, new_bal, now),
+                )
+            conn.execute(
+                "INSERT INTO ledger (user_id, delta, reason, payload, created_at) VALUES (?, ?, ?, ?, ?)",
+                (uid, WELCOME_BONUS, "welcome_bonus", "welcome_100", now),
+            )
+            conn.commit()
+            return True, new_bal, "ok"
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             conn.close()
 
@@ -294,18 +437,33 @@ def get_players(limit: int = 50) -> list[dict]:
     with _db_lock:
         conn = _db()
         try:
-            rows = conn.execute(
-                """
-                SELECT u.user_id, u.username, u.first_name, u.first_play_done,
-                       u.last_seen, u.created_at,
-                       COALESCE(b.stars, 0) AS stars
-                FROM users u
-                LEFT JOIN balances b ON b.user_id = u.user_id
-                ORDER BY u.last_seen DESC, u.created_at DESC
-                LIMIT ?
-                """,
-                (limit,),
-            ).fetchall()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT u.user_id, u.username, u.first_name, u.first_play_done,
+                           u.welcome_bonus_claimed,
+                           u.last_seen, u.created_at,
+                           COALESCE(b.stars, 0) AS stars
+                    FROM users u
+                    LEFT JOIN balances b ON b.user_id = u.user_id
+                    ORDER BY u.last_seen DESC, u.created_at DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+            except sqlite3.OperationalError:
+                rows = conn.execute(
+                    """
+                    SELECT u.user_id, u.username, u.first_name, u.first_play_done,
+                           u.last_seen, u.created_at,
+                           COALESCE(b.stars, 0) AS stars
+                    FROM users u
+                    LEFT JOIN balances b ON b.user_id = u.user_id
+                    ORDER BY u.last_seen DESC, u.created_at DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
             return [dict(r) for r in rows]
         finally:
             conn.close()
@@ -337,12 +495,20 @@ def get_stats() -> dict:
         conn = _db()
         try:
             users_n = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
-            free_left = conn.execute(
-                "SELECT COUNT(*) AS c FROM users WHERE first_play_done = 0"
-            ).fetchone()["c"]
-            played = conn.execute(
-                "SELECT COUNT(*) AS c FROM users WHERE first_play_done = 1"
-            ).fetchone()["c"]
+            try:
+                free_left = conn.execute(
+                    "SELECT COUNT(*) AS c FROM users WHERE COALESCE(welcome_bonus_claimed, 0) = 0"
+                ).fetchone()["c"]
+                played = conn.execute(
+                    "SELECT COUNT(*) AS c FROM users WHERE welcome_bonus_claimed = 1"
+                ).fetchone()["c"]
+            except sqlite3.OperationalError:
+                free_left = conn.execute(
+                    "SELECT COUNT(*) AS c FROM users WHERE first_play_done = 0"
+                ).fetchone()["c"]
+                played = conn.execute(
+                    "SELECT COUNT(*) AS c FROM users WHERE first_play_done = 1"
+                ).fetchone()["c"]
             bal_sum = conn.execute(
                 "SELECT COALESCE(SUM(stars), 0) AS s FROM balances"
             ).fetchone()["s"]
@@ -351,6 +517,9 @@ def get_stats() -> dict:
             ).fetchone()["c"]
             topups = conn.execute(
                 "SELECT COALESCE(SUM(delta), 0) AS s FROM ledger WHERE reason = 'topup' OR reason LIKE 'topup%'"
+            ).fetchone()["s"]
+            bonuses = conn.execute(
+                "SELECT COALESCE(SUM(delta), 0) AS s FROM ledger WHERE reason = 'welcome_bonus'"
             ).fetchone()["s"]
             wins = conn.execute(
                 "SELECT COALESCE(SUM(delta), 0) AS s FROM ledger WHERE reason = 'win_claim'"
@@ -365,6 +534,7 @@ def get_stats() -> dict:
                 "balance_sum": int(bal_sum),
                 "plays": int(plays),
                 "topups": int(topups),
+                "welcome_bonus_paid": int(bonuses),
                 "wins_paid": int(wins),
                 "stakes_burned": int(stakes),
             }
@@ -378,6 +548,8 @@ def reason_ru(reason: str) -> str:
         return "bet"
     if r == "win_claim":
         return "win"
+    if r == "welcome_bonus":
+        return "bonus"
     if r == "topup" or r.startswith("topup"):
         return "topup"
     if r == "tg_withdraw":
@@ -428,18 +600,36 @@ def notify_user(user_id: int, text: str) -> None:
         log.exception("notify_user failed uid=%s", user_id)
 
 
-def create_session(user_id: int, will_win: bool, prize: int = WIN_PRIZE, free: bool = False) -> str:
+def create_session(
+    user_id: int,
+    will_win: bool,
+    prize: int = 0,
+    free: bool = False,
+    fruit: str = "",
+) -> str:
     sid = secrets.token_hex(16)
     now = time.time()
+    fruit_id = (fruit or "").strip().lower()
+    if fruit_id not in FRUIT_PRIZES:
+        fruit_id = random.choice(FRUIT_IDS)
     with _db_lock:
         conn = _db()
         try:
             conn.execute(
                 """
-                INSERT INTO sessions (id, user_id, will_win, claimed, prize, free, created_at)
-                VALUES (?, ?, ?, 0, ?, ?, ?)
+                INSERT INTO sessions
+                  (id, user_id, will_win, claimed, prize, free, fruit, created_at)
+                VALUES (?, ?, ?, 0, ?, ?, ?, ?)
                 """,
-                (sid, int(user_id), 1 if will_win else 0, int(prize), 1 if free else 0, now),
+                (
+                    sid,
+                    int(user_id),
+                    1 if will_win else 0,
+                    int(prize),
+                    1 if free else 0,
+                    fruit_id,
+                    now,
+                ),
             )
             conn.commit()
         finally:
@@ -718,20 +908,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/health":
             return self._json(200, self._health_payload())
         if path == "/api/price":
-            return self._json(
-                200,
-                {
-                    "stars": GAME_COST,
-                    "gameCost": GAME_COST,
-                    "stakeMin": STAKE_MIN,
-                    "stakeMax": STAKE_MAX,
-                    "winMultiplier": WIN_MULTIPLIER,
-                    "freeFirstPrize": FREE_FIRST_PRIZE,
-                    "winPrize": WIN_PRIZE,
-                    "tgWithdrawMin": TG_WITHDRAW_MIN,
-                    "packages": list(TOPUP_PACKAGES),
-                },
-            )
+            return self._json(200, public_game_config())
         if path in ("/keepalive-setup", "/keepalive-setup.html"):
             self.path = "/keepalive-setup.html"
             return super().do_GET()
@@ -754,6 +931,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._handle_play(body)
         if parsed.path == "/api/claim":
             return self._handle_claim(body)
+        if parsed.path in ("/api/claim-bonus", "/api/welcome-bonus"):
+            return self._handle_claim_bonus(body)
         if parsed.path in ("/api/withdraw-telegram", "/api/tg-withdraw"):
             return self._handle_tg_withdraw(body)
         if parsed.path == "/api/create-invoice":
@@ -793,10 +972,12 @@ class Handler(SimpleHTTPRequestHandler):
             "stake_min": STAKE_MIN,
             "stake_max": STAKE_MAX,
             "win_multiplier": WIN_MULTIPLIER,
+            "welcome_bonus": WELCOME_BONUS,
             "free_first_prize": FREE_FIRST_PRIZE,
             "win_prize": WIN_PRIZE,
             "tg_withdraw_min": TG_WITHDRAW_MIN,
             "win_rate": WIN_RATE,
+            "paytable": dict(FRUIT_PRIZES),
             "last_external_ping_sec_ago": age,
             "ping_url": "/api/ping",
             "setup_url": "/keepalive-setup",
@@ -841,23 +1022,23 @@ class Handler(SimpleHTTPRequestHandler):
                 uname = (user.get("username") or "").lower() or None
 
         balance = 0
-        free_play = False
+        welcome_bonus = False
         if uid is not None:
             ensure_user(int(uid), uname, first_name)
             balance = get_balance(int(uid))
-            free_play = is_first_play_available(int(uid))
+            welcome_bonus = is_welcome_bonus_available(int(uid))
 
         log.info(
-            "api/me verified=%s admin=%s user=%s id=%s bal=%s free=%s",
+            "api/me verified=%s admin=%s user=%s id=%s bal=%s bonus=%s",
             verified,
             is_admin,
             uname,
             uid,
             balance,
-            free_play,
+            welcome_bonus,
         )
-        self._json(
-            200,
+        payload = public_game_config()
+        payload.update(
             {
                 "ok": True,
                 "isAdmin": is_admin,
@@ -865,22 +1046,97 @@ class Handler(SimpleHTTPRequestHandler):
                 "username": uname,
                 "userId": uid,
                 "balance": balance,
-                "gameCost": GAME_COST,
-                "stakeMin": STAKE_MIN,
-                "stakeMax": STAKE_MAX,
-                "winMultiplier": WIN_MULTIPLIER,
-                "freeFirstPrize": FREE_FIRST_PRIZE,
-                "winPrize": WIN_PRIZE,
-                "tgWithdrawMin": TG_WITHDRAW_MIN,
-                "freePlayAvailable": free_play,
+                "welcomeBonusAvailable": welcome_bonus,
+                "freePlayAvailable": False,
                 "canWithdrawTelegram": balance >= TG_WITHDRAW_MIN,
-                "packages": list(TOPUP_PACKAGES),
-                "stars": GAME_COST,
+            }
+        )
+        self._json(200, payload)
+
+    def _play_ok(
+        self,
+        *,
+        balance: int,
+        stake: int,
+        spent: int,
+        prize: int,
+        sid: str,
+        will_win: bool,
+        fruit: str,
+        is_admin: bool = False,
+        free: bool = False,
+    ) -> None:
+        payload = public_game_config()
+        payload.update(
+            {
+                "ok": True,
+                "free": free,
+                "firstFree": False,
+                "balance": balance,
+                "stake": stake,
+                "winPrize": prize,
+                "spent": spent,
+                "sessionId": sid,
+                "willWin": will_win,
+                "matchFruit": fruit,
+                "welcomeBonusAvailable": False,
+                "freePlayAvailable": False,
+                "isAdmin": is_admin,
+            }
+        )
+        self._json(200, payload)
+
+    def _handle_claim_bonus(self, body: dict):
+        """Забрать приветственный бонус 100⭐ (один раз)."""
+        user, verified, uname, uid = self._resolve_user(body)
+        if uid is None:
+            self._json(
+                401,
+                {
+                    "ok": False,
+                    "error": "open_in_telegram",
+                    "message": "Open the game via the Telegram bot.",
+                },
+            )
+            return
+
+        first_name = (user or {}).get("first_name") if user else None
+        ensure_user(int(uid), uname, first_name)
+
+        try:
+            ok, bal, err = claim_welcome_bonus(int(uid))
+        except Exception as e:
+            log.exception("claim-bonus failed")
+            self._json(500, {"ok": False, "error": str(e)})
+            return
+
+        if not ok:
+            self._json(
+                400,
+                {
+                    "ok": False,
+                    "error": err,
+                    "balance": bal,
+                    "welcomeBonusAvailable": False,
+                    "message": "Bonus already claimed" if err == "already_claimed" else err,
+                },
+            )
+            return
+
+        log.info("welcome-bonus user=%s bal=%s", uid, bal)
+        self._json(
+            200,
+            {
+                "ok": True,
+                "balance": bal,
+                "bonus": WELCOME_BONUS,
+                "welcomeBonusAvailable": False,
+                "message": f"+{WELCOME_BONUS} ⭐ welcome bonus",
             },
         )
 
     def _handle_play(self, body: dict):
-        """Списать ставку (или free first), создать сессию (will_win, prize)."""
+        """Списать ставку, создать сессию (will_win 1/5, приз по фрукту)."""
         user, verified, uname, uid = self._resolve_user(body)
         admin = is_admin_user(user) if verified else False
         soft = bool(
@@ -888,37 +1144,26 @@ class Handler(SimpleHTTPRequestHandler):
         )
         is_admin = admin or (soft and not verified)
         stake = clamp_stake(body.get("stake") or body.get("amount") or STAKE_MIN)
+        will_win, fruit, prize = pick_round()
 
-        # --- admin: всегда free, первая игра = гарантированный win + 9⭐ ---
+        # --- admin: играет бесплатно, тот же шанс 1 к 5 ---
         if is_admin:
             bal = get_balance(int(uid)) if uid else 0
-            free_first = bool(uid is not None and is_first_play_available(int(uid)))
-            will_win = True if free_first else (random.random() < WIN_RATE)
-            prize = FREE_FIRST_PRIZE if free_first else prize_for_stake(stake)
             sid = ""
             if uid is not None:
-                if free_first:
-                    mark_first_play_done(int(uid))
-                sid = create_session(int(uid), will_win, prize, free=True)
-            self._json(
-                200,
-                {
-                    "ok": True,
-                    "free": True,
-                    "firstFree": free_first,
-                    "balance": bal,
-                    "gameCost": GAME_COST,
-                    "stake": 0 if free_first else stake,
-                    "stakeMin": STAKE_MIN,
-                    "stakeMax": STAKE_MAX,
-                    "winMultiplier": WIN_MULTIPLIER,
-                    "winPrize": prize,
-                    "tgWithdrawMin": TG_WITHDRAW_MIN,
-                    "isAdmin": True,
-                    "sessionId": sid,
-                    "willWin": will_win,
-                    "freePlayAvailable": False,
-                },
+                sid = create_session(
+                    int(uid), will_win, prize, free=True, fruit=fruit
+                )
+            self._play_ok(
+                balance=bal,
+                stake=stake,
+                spent=0,
+                prize=prize,
+                sid=sid,
+                will_win=will_win,
+                fruit=fruit,
+                is_admin=True,
+                free=True,
             )
             return
 
@@ -933,41 +1178,9 @@ class Handler(SimpleHTTPRequestHandler):
             )
             return
 
-        # сохраняем ник
         first_name = (user or {}).get("first_name") if user else None
         ensure_user(int(uid), uname, first_name)
 
-        free_first = is_first_play_available(int(uid))
-
-        # Первая free-игра: разрешаем даже без валидного initData (есть userId)
-        if free_first:
-            mark_first_play_done(int(uid))
-            bal = get_balance(int(uid))
-            sid = create_session(int(uid), True, FREE_FIRST_PRIZE, free=True)
-            log.info("play FREE-FIRST user=%s session=%s", uid, sid[:8])
-            self._json(
-                200,
-                {
-                    "ok": True,
-                    "free": True,
-                    "firstFree": True,
-                    "balance": bal,
-                    "gameCost": GAME_COST,
-                    "stake": 0,
-                    "stakeMin": STAKE_MIN,
-                    "stakeMax": STAKE_MAX,
-                    "winMultiplier": WIN_MULTIPLIER,
-                    "winPrize": FREE_FIRST_PRIZE,
-                    "tgWithdrawMin": TG_WITHDRAW_MIN,
-                    "spent": 0,
-                    "sessionId": sid,
-                    "willWin": True,
-                    "freePlayAvailable": False,
-                },
-            )
-            return
-
-        # Платные игры — нужна подпись initData
         if not verified:
             self._json(
                 401,
@@ -979,8 +1192,6 @@ class Handler(SimpleHTTPRequestHandler):
             )
             return
 
-        will_win = random.random() < WIN_RATE
-        prize = prize_for_stake(stake)
         ok, bal = spend_for_game(int(uid), stake)
         if not ok:
             self._json(
@@ -991,40 +1202,31 @@ class Handler(SimpleHTTPRequestHandler):
                     "balance": bal,
                     "gameCost": stake,
                     "stake": stake,
+                    "welcomeBonusAvailable": is_welcome_bonus_available(int(uid)),
                     "message": f"Not enough ⭐. Need {stake}, you have {bal}.",
                 },
             )
             return
 
-        sid = create_session(int(uid), will_win, prize, free=False)
+        sid = create_session(int(uid), will_win, prize, free=False, fruit=fruit)
         log.info(
-            "play user=%s bal=%s win=%s stake=%s prize=%s session=%s",
+            "play user=%s bal=%s win=%s fruit=%s stake=%s prize=%s session=%s",
             uid,
             bal,
             will_win,
+            fruit,
             stake,
             prize,
             sid[:8],
         )
-        self._json(
-            200,
-            {
-                "ok": True,
-                "free": False,
-                "firstFree": False,
-                "balance": bal,
-                "gameCost": GAME_COST,
-                "stake": stake,
-                "stakeMin": STAKE_MIN,
-                "stakeMax": STAKE_MAX,
-                "winMultiplier": WIN_MULTIPLIER,
-                "winPrize": prize,
-                "tgWithdrawMin": TG_WITHDRAW_MIN,
-                "spent": stake,
-                "sessionId": sid,
-                "willWin": will_win,
-                "freePlayAvailable": False,
-            },
+        self._play_ok(
+            balance=bal,
+            stake=stake,
+            spent=stake,
+            prize=prize,
+            sid=sid,
+            will_win=will_win,
+            fruit=fruit,
         )
 
     def _handle_tg_withdraw(self, body: dict):
@@ -1298,11 +1500,11 @@ def start_http():
     log.info("HTTP http://0.0.0.0:%s  (игра + API + /api/ping)", PORT)
     log.info("Админы (free play): %s", ", ".join(sorted(ADMIN_USERNAMES)) or "(нет)")
     log.info(
-        "Ставка %s–%s ⭐ ×%s | free-приз=%s | tg_out≥%s | win_rate=%.2f",
+        "Ставка %s–%s ⭐ | bonus=%s | paytable=%s | tg_out≥%s | win_rate=%.2f",
         STAKE_MIN,
         STAKE_MAX,
-        WIN_MULTIPLIER,
-        FREE_FIRST_PRIZE,
+        WELCOME_BONUS,
+        FRUIT_PRIZES,
         TG_WITHDRAW_MIN,
         WIN_RATE,
     )
@@ -1392,21 +1594,21 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     uname = (user.username or "").lower() if user else ""
     bal = get_balance(user.id) if user else 0
-    free = is_first_play_available(user.id) if user else False
+    bonus = is_welcome_bonus_available(user.id) if user else False
     if uname in ADMIN_USERNAMES:
         text = (
             "👑 Admin mode\n\n"
             "Use the buttons below to manage the bot.\n"
-            "Find 3 identical · bet ×10\n"
+            "Find 3 identical · 1 in 5 · banana 1000⭐\n"
             "Or tap Play 👇"
         )
     else:
-        free_line = "🎁 First game is free!\n" if free else ""
+        bonus_line = f"🎁 Welcome bonus: claim {WELCOME_BONUS} ⭐\n" if bonus else ""
         text = (
             "🎰 BANANAWOW\n\n"
-            f"{free_line}"
+            f"{bonus_line}"
             "Find 3 identical fruits in 3 moves.\n"
-            f"Bet {STAKE_MIN}–{STAKE_MAX} ⭐ · win ×{WIN_MULTIPLIER}\n"
+            f"Win chance 1 in 5 · 3 bananas = {FRUIT_PRIZES['banana']} ⭐\n"
             f"Balance: {bal} ⭐\n\n"
             "Tap Play 👇"
         )
@@ -1432,12 +1634,15 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     ensure_user(u.id, u.username, u.first_name)
     bal = get_balance(u.id)
-    free = is_first_play_available(u.id)
-    free_txt = "yes 🎁" if free else "no"
+    bonus = is_welcome_bonus_available(u.id)
+    bonus_txt = f"claim {WELCOME_BONUS} ⭐" if bonus else "claimed"
     await update.message.reply_text(
         f"⭐ Balance: {bal}\n"
-        f"Free game: {free_txt}\n"
-        f"Bet {STAKE_MIN}–{STAKE_MAX} ⭐ · prize ×{WIN_MULTIPLIER}\n\n"
+        f"Welcome bonus: {bonus_txt}\n"
+        f"Bet {STAKE_MIN}–{STAKE_MAX} ⭐ · 1 in 5\n"
+        f"3🍌 {FRUIT_PRIZES['banana']} · 3🍓 {FRUIT_PRIZES['strawberry']} · "
+        f"3🍒 {FRUIT_PRIZES['cherry']} · 3🍋 {FRUIT_PRIZES['lemon']} · "
+        f"3🍇 {FRUIT_PRIZES['grape']}\n\n"
         "Top up inside the mini app.",
         reply_markup=keyboard_for(u),
     )
@@ -1495,7 +1700,7 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "⚠️ This will reset ALL players:\n"
         "• balances\n"
-        "• free games (everyone can play free once again)\n"
+        "• welcome bonus (everyone can claim 100 ⭐ again)\n"
         "• sessions and transaction history\n"
         "• withdraw requests\n\n"
         f"To confirm, tap:\n«{BTN_RESET_OK}»\n"
@@ -1519,7 +1724,7 @@ async def cmd_reset_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = [f"• {k}: {v}" for k, v in counts.items()]
     await update.message.reply_text(
         "✅ Reset complete.\n"
-        "Everyone is treated as a new player — free game is available again.\n\n"
+        "Everyone is treated as a new player — welcome bonus is available again.\n\n"
         "Removed:\n" + "\n".join(lines) + "\n\n"
         "⚠️ Players may still have cached UI — "
         "ask them to close and reopen the mini app.",
@@ -1542,7 +1747,10 @@ async def cmd_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = [f"👥 Players ({len(rows)}):\n"]
     for r in rows:
         name = display_name(r["user_id"], r.get("username"), r.get("first_name"))
-        free = "free✓" if int(r.get("first_play_done") or 0) == 0 else "free✗"
+        bonus_done = r.get("welcome_bonus_claimed")
+        if bonus_done is None:
+            bonus_done = r.get("first_play_done")
+        free = "bonus✓" if int(bonus_done or 0) == 0 else "bonus✗"
         stars = int(r.get("stars") or 0)
         seen = _fmt_ts(r.get("last_seen") or r.get("created_at") or 0)
         lines.append(f"• {name} · {stars}⭐ · {free} · {seen}")
@@ -1595,8 +1803,9 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📊 BANANAWOW stats\n\n"
         f"Players: {s['users']}\n"
-        f"Free left: {s['free_left']}\n"
-        f"Used free: {s['played_free']}\n"
+        f"Bonus left: {s['free_left']}\n"
+        f"Bonus claimed: {s['played_free']}\n"
+        f"Welcome paid: {s.get('welcome_bonus_paid', 0)} ⭐\n"
         f"Total balances: {s['balance_sum']} ⭐\n"
         f"Bets (games): {s['plays']}\n"
         f"Burned in bets: {s['stakes_burned']} ⭐\n"
