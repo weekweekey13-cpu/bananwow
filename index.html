@@ -1317,6 +1317,7 @@
       let matchFruit = null;
       let openCount = 0;
       let openedOrder = [];
+      let openPlan = [];
       /** Сессия сервера: выигрыш / claim */
       let sessionId = "";
       let willWin = false;
@@ -1630,8 +1631,7 @@
 
       /**
        * Колода: 3 одинаковых (match) + 2+2+2 остальных.
-       * Игрок всегда открывает: 1-я и 2-я = match, 3-я = другой.
-       * После проигрыша подсвечиваем оставшуюся третью match-карту.
+       * Порядок открытия задаёт openPlan — не всегда первые две одинаковые.
        */
       function generateRiggedDeck() {
         const types = shuffle(FRUITS.slice());
@@ -1648,6 +1648,33 @@
           result.push(rest[i], rest[i]);
         }
         return shuffle(result);
+      }
+
+      function buildOpenPlan() {
+        if (willWin) {
+          openPlan = [matchFruit, matchFruit, matchFruit];
+          return;
+        }
+        const others = FRUITS.filter(function (f) {
+          return !matchFruit || f.id !== matchFruit.id;
+        });
+        const a = others[Math.floor(Math.random() * others.length)] || pickOtherFruit();
+        let b = others[Math.floor(Math.random() * others.length)] || a;
+        if (b.id === a.id && others.length > 1) {
+          b = others[(others.indexOf(a) + 1) % others.length];
+        }
+        const roll = Math.random();
+        if (roll < 0.22) {
+          openPlan = [matchFruit, matchFruit, a];
+        } else if (roll < 0.42) {
+          openPlan = [a, matchFruit, matchFruit];
+        } else if (roll < 0.62) {
+          openPlan = [matchFruit, a, b];
+        } else if (roll < 0.82) {
+          openPlan = [a, b, matchFruit];
+        } else {
+          openPlan = [a, matchFruit, b];
+        }
       }
 
       function cardEl(index) {
@@ -1739,6 +1766,7 @@
         inRound = false;
         openCount = 0;
         openedOrder = [];
+        openPlan = [];
         deck = generateRiggedDeck();
         renderBoard();
         boardEl.classList.add("locked", "preview");
@@ -1769,6 +1797,7 @@
           openCount = 0;
           openedOrder = [];
           deck = generateRiggedDeck();
+          buildOpenPlan();
           renderBoard();
           if (boardEl) boardEl.classList.remove("locked", "preview");
           if (loseOverlay) loseOverlay.classList.remove("show");
@@ -1972,22 +2001,18 @@
         }
         if (btn.classList.contains("flipped")) return;
 
-        // 1-я и 2-я — всегда match; 3-я — match при выигрыше, иначе другой
         const step = openCount;
-        if (step < 2) {
-          ensureFruitAt(index, matchFruit);
-        } else if (willWin) {
-          ensureFruitAt(index, matchFruit);
-        } else {
-          ensureFruitAt(index, pickOtherFruit());
-        }
+        const planned = (openPlan && openPlan[step]) || (willWin ? matchFruit : pickOtherFruit());
+        ensureFruitAt(index, planned);
 
-        // сначала анимация UI, звук следом (не блокирует клик)
         btn.classList.add("flipped");
         btn.disabled = true;
         btn.setAttribute("aria-label", deck[index].label);
-        if (step < 2 || willWin) btn.classList.add("match-ok");
-        else btn.classList.add("mismatch");
+        const prevSame = openPlan.slice(0, step).some(function (f) {
+          return f && planned && f.id === planned.id;
+        });
+        if (willWin || prevSame) btn.classList.add("match-ok");
+        else if (step > 0) btn.classList.add("mismatch");
 
         openCount += 1;
         openedOrder.push(index);
@@ -2025,47 +2050,58 @@
         const cards = Array.from(boardEl.querySelectorAll(".card"));
         const thirdIdx = openedOrder[2];
         const thirdBtn = thirdIdx != null ? cardEl(thirdIdx) : null;
+        const openedFruits = openedOrder.map(function (i) {
+          return deck[i];
+        });
+        const matchOpened = openedFruits.filter(function (f) {
+          return f && matchFruit && f.id === matchFruit.id;
+        }).length;
 
-        // Трясём только «не ту» третью
         if (thirdBtn) thirdBtn.classList.add("shake");
 
         setTimeout(() => {
           if (thirdBtn) thirdBtn.classList.remove("shake");
 
-          // Подсветить две совпавшие, приглушить остальное
           cards.forEach((c) => {
             const i = Number(c.dataset.index);
-            if (openedOrder.indexOf(i) === 0 || openedOrder.indexOf(i) === 1) {
-              c.classList.add("match-ok");
-            } else if (i === thirdIdx) {
-              c.classList.add("mismatch");
-            } else {
+            const fruit = deck[i];
+            const openedHere = openedOrder.indexOf(i) !== -1;
+            if (!openedHere) {
               c.classList.add("dim");
+              return;
             }
+            const twins = openedFruits.filter(function (f) {
+              return f && fruit && f.id === fruit.id;
+            }).length;
+            if (twins >= 2) c.classList.add("match-ok");
+            else c.classList.add("mismatch");
           });
 
-          // Показать, где была третья одинаковая
-          const missIdx = findMissedMatchIndex();
-          if (missIdx >= 0) {
-            ensureFruitAt(missIdx, matchFruit);
-            const missBtn = cardEl(missIdx);
-            if (missBtn) {
-              missBtn.classList.remove("dim");
-              missBtn.classList.add("flipped", "reveal-miss");
-              missBtn.disabled = true;
-              missBtn.setAttribute(
-                "aria-label",
-                (matchFruit && matchFruit.label) || "Found"
-              );
+          if (matchOpened >= 2) {
+            const missIdx = findMissedMatchIndex();
+            if (missIdx >= 0) {
+              ensureFruitAt(missIdx, matchFruit);
+              const missBtn = cardEl(missIdx);
+              if (missBtn) {
+                missBtn.classList.remove("dim");
+                missBtn.classList.add("flipped", "reveal-miss");
+                missBtn.disabled = true;
+                missBtn.setAttribute(
+                  "aria-label",
+                  (matchFruit && matchFruit.label) || "Found"
+                );
+              }
             }
           }
 
           const lead = document.getElementById("loseLead");
-          if (lead && matchFruit) {
-            lead.textContent =
-              "The third \"" +
-              matchFruit.label +
-              "\" was right there 👆 Try again!";
+          if (lead) {
+            if (matchOpened >= 2 && matchFruit) {
+              lead.textContent =
+                "The third \"" + matchFruit.label + "\" was right there 👆 Try again!";
+            } else {
+              lead.textContent = "No three of a kind this time. Try again!";
+            }
           }
 
           // Дать рассмотреть подсветку, потом открыть остальные и модалку
