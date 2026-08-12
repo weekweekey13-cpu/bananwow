@@ -443,6 +443,8 @@
       box-shadow: 0 8px 24px rgba(201, 162, 39, 0.4);
     }
 
+    #hintLine { display: none !important; }
+
     .hint-line {
       font-size: 0.8rem;
       color: var(--muted);
@@ -1065,7 +1067,7 @@
 
     <div class="play-area" id="playArea">
       <button type="button" class="btn btn-pulse" id="playBtn">Play · 10 ⭐</button>
-      <p class="hint-line" id="hintLine">Top up your balance and start</p>
+      <p class="hint-line hidden" id="hintLine" aria-hidden="true"></p>
     </div>
   </div>
 
