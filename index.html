@@ -1840,31 +1840,21 @@
         }
       }
 
-      function playCardFlipSound(step) {
-        try {
-          const ctx = ensureAudio();
-          if (!ctx || ctx.state !== "running") return;
-          const t0 = ctx.currentTime;
-          const base = 420 + (step || 0) * 70;
-          const osc = ctx.createOscillator();
-          const g = ctx.createGain();
-          osc.type = "sine";
-          osc.frequency.setValueAtTime(base, t0);
-          osc.frequency.exponentialRampToValueAtTime(base * 1.45, t0 + 0.07);
-          g.gain.setValueAtTime(0.12, t0);
-          g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.09);
-          osc.connect(g);
-          g.connect(ctx.destination);
-          osc.start(t0);
-          osc.stop(t0 + 0.1);
-        } catch (_) {}
+      function playCardFlipSound() {
+        playSfx("click", 0.75);
       }
 
-      const SFX_V = "20260812f";
+      function playPlaySound() {
+        playSfx("play", 0.72);
+      }
+
+      const SFX_V = "20260812g";
       const sfxSrc = {
         coins: "assets/sounds/coins.mp3?v=" + SFX_V,
         win: "assets/sounds/win.mp3?v=" + SFX_V,
         lose: "assets/sounds/lose.mp3?v=" + SFX_V,
+        click: "assets/sounds/click.mp3?v=" + SFX_V,
+        play: "assets/sounds/play.mp3?v=" + SFX_V,
       };
       const sfxBase = {};
       let bgmEl = null;
@@ -2004,9 +1994,8 @@
         attemptsLeft -= 1;
         attemptsEl.textContent = String(attemptsLeft);
 
-        // звук + haptic асинхронно
+        playCardFlipSound();
         requestAnimationFrame(function () {
-          playCardFlipSound(step);
           try {
             if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
           } catch (_) {}
@@ -2978,6 +2967,7 @@
 
       // Events
       playBtn.addEventListener("click", async () => {
+        playPlaySound();
         if (!isAdmin && balance < currentStake) {
           openTopup();
           return;
@@ -2986,6 +2976,7 @@
       });
 
       retryBtn.addEventListener("click", async () => {
+        playPlaySound();
         if (!isAdmin && balance < currentStake) {
           loseOverlay.classList.remove("show");
           openTopup();
@@ -3005,6 +2996,7 @@
       });
 
       winRetryBtn.addEventListener("click", async () => {
+        playPlaySound();
         if (!isAdmin && balance < currentStake) {
           winOverlay.classList.remove("show");
           openTopup();
