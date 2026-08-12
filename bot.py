@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import os
 import random
 import secrets
@@ -44,7 +45,7 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.7.0"
+APP_VERSION = "2.8.0"
 GAME_COST = 10  # мин. ставка (совместимость)
 STAKE_MIN = 10
 STAKE_MAX = 200
@@ -66,6 +67,8 @@ FRUIT_PRIZES: dict[str, int] = {
 WIN_PRIZE = FRUIT_PRIZES["banana"]
 # Минимальная сумма вывода с игрового баланса в Telegram Stars
 TG_WITHDRAW_MIN = 110
+# Сервисный сбор за вывод — оплачивается звёздами ЛИЧНОГО аккаунта (invoice XTR)
+WITHDRAW_FEE_RATE = 0.05
 
 # Базовый шанс + pity: после PITY_AFTER проигрышей подряд — гарантированный выигрыш
 try:
@@ -77,6 +80,15 @@ PITY_AFTER = 3  # 4-я игра после 3 поражений — выигры
 
 # Пакеты пополнения: сколько ⭐ купить (= сумма XTR)
 TOPUP_PACKAGES = (10, 30, 50, 100, 250)
+
+
+def withdraw_fee_for(amount: int) -> int:
+    """5% от суммы вывода, вверх до целой ⭐, минимум 1."""
+    try:
+        n = int(amount)
+    except (TypeError, ValueError):
+        n = TG_WITHDRAW_MIN
+    return max(1, int(math.ceil(n * WITHDRAW_FEE_RATE)))
 
 
 def clamp_stake(raw) -> int:
@@ -120,6 +132,8 @@ def public_game_config() -> dict:
         "freeFirstPrize": FREE_FIRST_PRIZE,
         "winPrize": WIN_PRIZE,
         "tgWithdrawMin": TG_WITHDRAW_MIN,
+        "withdrawFeeRate": WITHDRAW_FEE_RATE,
+        "withdrawFee": withdraw_fee_for(TG_WITHDRAW_MIN),
         "winRate": WIN_RATE,
         "pityAfter": PITY_AFTER,
         "paytable": paytable_for_stake(STAKE_MIN),
@@ -223,6 +237,21 @@ def init_db() -> None:
                     amount INTEGER NOT NULL,
                     status TEXT NOT NULL DEFAULT 'done',
                     created_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS withdraw_fees (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    withdraw_amount INTEGER NOT NULL,
+                    fee_amount INTEGER NOT NULL,
+                    payload TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    created_at REAL NOT NULL,
+                    paid_at REAL,
+                    used_at REAL
                 )
                 """
             )
@@ -472,6 +501,7 @@ def reset_all_game_data() -> dict:
                 "sessions",
                 "ledger",
                 "tg_withdrawals",
+                "withdraw_fees",
             ):
                 try:
                     n = conn.execute(f"SELECT COUNT(*) AS c FROM {table}").fetchone()["c"]
@@ -643,6 +673,149 @@ def withdraw_to_telegram(user_id: int, amount: int = TG_WITHDRAW_MIN) -> tuple[b
         finally:
             conn.close()
     return True, bal, "ok"
+
+
+def create_withdraw_fee(user_id: int, withdraw_amount: int, fee_amount: int, payload: str) -> None:
+    now = time.time()
+    with _db_lock:
+        conn = _db()
+        try:
+            conn.execute(
+                """
+                INSERT INTO withdraw_fees
+                  (user_id, withdraw_amount, fee_amount, payload, status, created_at)
+                VALUES (?, ?, ?, ?, 'pending', ?)
+                """,
+                (int(user_id), int(withdraw_amount), int(fee_amount), payload, now),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def mark_withdraw_fee_paid(payload: str) -> dict | None:
+    """Пометить сбор оплаченным. → row dict или None."""
+    now = time.time()
+    with _db_lock:
+        conn = _db()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT * FROM withdraw_fees WHERE payload = ?",
+                (payload,),
+            ).fetchone()
+            if not row:
+                conn.rollback()
+                return None
+            status = row["status"]
+            if status == "pending":
+                conn.execute(
+                    "UPDATE withdraw_fees SET status = 'paid', paid_at = ? WHERE payload = ?",
+                    (now, payload),
+                )
+                conn.commit()
+                data = dict(row)
+                data["status"] = "paid"
+                return data
+            conn.commit()
+            return dict(row)
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+
+def has_usable_withdraw_fee(user_id: int, withdraw_amount: int) -> bool:
+    with _db_lock:
+        conn = _db()
+        try:
+            row = conn.execute(
+                """
+                SELECT id FROM withdraw_fees
+                WHERE user_id = ? AND withdraw_amount = ? AND status = 'paid'
+                ORDER BY id DESC LIMIT 1
+                """,
+                (int(user_id), int(withdraw_amount)),
+            ).fetchone()
+            return bool(row)
+        except sqlite3.OperationalError:
+            return False
+        finally:
+            conn.close()
+
+
+def consume_paid_withdraw_fee(user_id: int, withdraw_amount: int) -> tuple[bool, int]:
+    """Списать оплаченный сбор. → (ok, fee_amount)."""
+    now = time.time()
+    with _db_lock:
+        conn = _db()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """
+                SELECT id, fee_amount FROM withdraw_fees
+                WHERE user_id = ? AND withdraw_amount = ? AND status = 'paid'
+                ORDER BY id DESC LIMIT 1
+                """,
+                (int(user_id), int(withdraw_amount)),
+            ).fetchone()
+            if not row:
+                conn.rollback()
+                return False, 0
+            conn.execute(
+                "UPDATE withdraw_fees SET status = 'used', used_at = ? WHERE id = ?",
+                (now, int(row["id"])),
+            )
+            conn.commit()
+            return True, int(row["fee_amount"])
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+
+def restore_withdraw_fee(user_id: int, withdraw_amount: int) -> None:
+    """Вернуть used → paid, если вывод не прошёл."""
+    with _db_lock:
+        conn = _db()
+        try:
+            conn.execute(
+                """
+                UPDATE withdraw_fees
+                SET status = 'paid', used_at = NULL
+                WHERE id = (
+                    SELECT id FROM withdraw_fees
+                    WHERE user_id = ? AND withdraw_amount = ? AND status = 'used'
+                    ORDER BY id DESC LIMIT 1
+                )
+                """,
+                (int(user_id), int(withdraw_amount)),
+            )
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+        finally:
+            conn.close()
+
+
+def parse_wfee_payload(payload: str) -> tuple[int, int, int] | None:
+    """wfee_{userId}_{withdrawAmount}_{fee}_{ts} → (uid, amount, fee)."""
+    if not payload or not payload.startswith("wfee_"):
+        return None
+    parts = payload.split("_")
+    if len(parts) < 5:
+        return None
+    try:
+        uid = int(parts[1])
+        amount = int(parts[2])
+        fee = int(parts[3])
+    except ValueError:
+        return None
+    if uid < 1 or amount < 1 or fee < 1:
+        return None
+    return uid, amount, fee
 
 
 def notify_user(user_id: int, text: str) -> None:
@@ -996,6 +1169,11 @@ class Handler(SimpleHTTPRequestHandler):
             return self._handle_claim_bonus(body)
         if parsed.path in ("/api/withdraw-telegram", "/api/tg-withdraw"):
             return self._handle_tg_withdraw(body)
+        if parsed.path in (
+            "/api/create-withdraw-fee",
+            "/api/withdraw-fee-invoice",
+        ):
+            return self._handle_withdraw_fee_invoice(body)
         if parsed.path == "/api/create-invoice":
             return self._handle_invoice(body)
         if parsed.path == "/api/balance":
@@ -1112,6 +1290,10 @@ class Handler(SimpleHTTPRequestHandler):
                 "welcomeBonusAvailable": welcome_bonus,
                 "freePlayAvailable": False,
                 "canWithdrawTelegram": balance >= TG_WITHDRAW_MIN,
+                "withdrawFeePaid": bool(
+                    uid is not None
+                    and has_usable_withdraw_fee(int(uid), TG_WITHDRAW_MIN)
+                ),
             }
         )
         self._json(200, payload)
@@ -1348,7 +1530,48 @@ class Handler(SimpleHTTPRequestHandler):
         if amount < TG_WITHDRAW_MIN:
             amount = TG_WITHDRAW_MIN
 
+        fee = withdraw_fee_for(amount)
+        fee_ok = is_admin or has_usable_withdraw_fee(int(uid), amount)
+        if not fee_ok:
+            self._json(
+                402,
+                {
+                    "ok": False,
+                    "error": "fee_required",
+                    "balance": bal_before,
+                    "amount": amount,
+                    "fee": fee,
+                    "feeRate": WITHDRAW_FEE_RATE,
+                    "tgWithdrawMin": TG_WITHDRAW_MIN,
+                    "message": (
+                        "Для вывода звёзд на личный счет оплатите сервисный сбор 5%"
+                    ),
+                },
+            )
+            return
+
+        if not is_admin:
+            consumed, _fee_amt = consume_paid_withdraw_fee(int(uid), amount)
+            if not consumed:
+                self._json(
+                    402,
+                    {
+                        "ok": False,
+                        "error": "fee_required",
+                        "balance": bal_before,
+                        "amount": amount,
+                        "fee": fee,
+                        "feeRate": WITHDRAW_FEE_RATE,
+                        "message": (
+                            "Для вывода звёзд на личный счет оплатите сервисный сбор 5%"
+                        ),
+                    },
+                )
+                return
+
         ok, bal, err = withdraw_to_telegram(int(uid), amount)
+        if not ok and not is_admin:
+            restore_withdraw_fee(int(uid), amount)
         if not ok:
             self._json(
                 402,
@@ -1473,6 +1696,134 @@ class Handler(SimpleHTTPRequestHandler):
                 "message": f"+{prize_amt} ⭐ to balance",
             },
         )
+
+    def _handle_withdraw_fee_invoice(self, body: dict):
+        """Счёт на сервисный сбор 5% — оплата звёздами личного аккаунта Telegram."""
+        user, verified, uname, uid = self._resolve_user(body)
+        admin = is_admin_user(user) if verified else False
+        soft = bool(
+            (body.get("username") or "").strip().lstrip("@").lower() in ADMIN_USERNAMES
+        )
+        is_admin = admin or (soft and not verified)
+
+        if uid is None:
+            self._json(
+                401,
+                {
+                    "ok": False,
+                    "error": "open_in_telegram",
+                    "message": "Open the game via the Telegram bot.",
+                },
+            )
+            return
+
+        if not verified and not is_admin:
+            self._json(
+                401,
+                {
+                    "ok": False,
+                    "error": "open_in_telegram",
+                    "message": "Reopen the game via the Play button in the bot.",
+                },
+            )
+            return
+
+        try:
+            amount = int(body.get("amount") or TG_WITHDRAW_MIN)
+        except (TypeError, ValueError):
+            amount = TG_WITHDRAW_MIN
+        if amount < TG_WITHDRAW_MIN:
+            amount = TG_WITHDRAW_MIN
+
+        bal = get_balance(int(uid))
+        if bal < TG_WITHDRAW_MIN:
+            self._json(
+                402,
+                {
+                    "ok": False,
+                    "error": "min_balance",
+                    "balance": bal,
+                    "tgWithdrawMin": TG_WITHDRAW_MIN,
+                    "message": f"Вывод от {TG_WITHDRAW_MIN} ⭐. У вас {bal} ⭐.",
+                },
+            )
+            return
+
+        amount = min(amount, bal)
+        if amount < TG_WITHDRAW_MIN:
+            amount = TG_WITHDRAW_MIN
+        fee = withdraw_fee_for(amount)
+
+        if is_admin:
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "free": True,
+                    "isAdmin": True,
+                    "amount": amount,
+                    "fee": 0,
+                    "balance": bal,
+                },
+            )
+            return
+
+        if has_usable_withdraw_fee(int(uid), amount):
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "alreadyPaid": True,
+                    "amount": amount,
+                    "fee": fee,
+                    "balance": bal,
+                    "message": "Сбор уже оплачен — можно выводить.",
+                },
+            )
+            return
+
+        payload = f"wfee_{int(uid)}_{amount}_{fee}_{int(time.time() * 1000)}"
+        try:
+            result = api_call(
+                "createInvoiceLink",
+                {
+                    "title": "Сервисный сбор 5%",
+                    "description": (
+                        f"Сбор 5% за вывод {amount} ⭐ на личный счёт Telegram. "
+                        f"Оплата со звёзд вашего аккаунта — {fee} ⭐. "
+                        "Игровой баланс не списывается."
+                    ),
+                    "payload": payload,
+                    "provider_token": "",
+                    "currency": "XTR",
+                    "prices": [{"label": f"Сбор 5% · {fee} ⭐", "amount": fee}],
+                },
+            )
+            if not result.get("ok"):
+                raise RuntimeError(result.get("description") or str(result))
+            link = result["result"]
+            create_withdraw_fee(int(uid), amount, fee, payload)
+            self._json(
+                200,
+                {
+                    "ok": True,
+                    "invoiceLink": link,
+                    "amount": amount,
+                    "fee": fee,
+                    "feeRate": WITHDRAW_FEE_RATE,
+                    "balance": bal,
+                    "fromPersonalAccount": True,
+                },
+            )
+        except (HTTPError, URLError, RuntimeError, KeyError) as e:
+            log.exception("withdraw-fee invoice failed")
+            msg = getattr(e, "reason", None) or str(e)
+            if isinstance(e, HTTPError):
+                try:
+                    msg = e.read().decode("utf-8", errors="replace")
+                except Exception:
+                    msg = str(e)
+            self._json(500, {"ok": False, "error": msg})
 
     def _handle_invoice(self, body: dict):
         """Счёт на пополнение баланса (пакет Stars)."""
@@ -1889,9 +2240,13 @@ async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.pre_checkout_query
     if not query:
         return
-    # Принимаем topup_* и старые play_* (на всякий случай)
+    # Принимаем topup_*, wfee_* (сбор 5%) и старые play_*
     payload = query.invoice_payload or ""
-    if payload.startswith("topup_") or payload.startswith("play_"):
+    if (
+        payload.startswith("topup_")
+        or payload.startswith("play_")
+        or payload.startswith("wfee_")
+    ):
         await query.answer(ok=True)
     else:
         await query.answer(ok=False, error_message="Unknown payment")
@@ -1914,6 +2269,51 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     credited = 0
     new_bal = 0
+    wfee = parse_wfee_payload(payload)
+    if wfee:
+        fee_uid, w_amount, w_fee = wfee
+        pay_uid = fee_uid or uid
+        rec = mark_withdraw_fee_paid(payload)
+        log.info(
+            "withdraw-fee paid user=%s amount=%s fee=%s rec=%s",
+            pay_uid,
+            w_amount,
+            w_fee,
+            bool(rec),
+        )
+        if pay_uid:
+            consumed, _ = consume_paid_withdraw_fee(int(pay_uid), int(w_amount))
+            if consumed:
+                ok, bal, err = withdraw_to_telegram(int(pay_uid), int(w_amount))
+                if not ok:
+                    restore_withdraw_fee(int(pay_uid), int(w_amount))
+                    notify_user(
+                        int(pay_uid),
+                        (
+                            f"✅ Сервисный сбор {w_fee} ⭐ оплачен с вашего аккаунта Telegram.\n"
+                            f"Вывод пока не прошёл ({err}). "
+                            "Откройте игру и нажмите «Вывести» ещё раз."
+                        ),
+                    )
+                else:
+                    notify_user(
+                        int(pay_uid),
+                        (
+                            f"✅ Сервисный сбор {w_fee} ⭐ оплачен с личного аккаунта.\n"
+                            f"Вывод {w_amount} ⭐ с игрового баланса выполнен.\n"
+                            f"Игровой баланс: {bal} ⭐"
+                        ),
+                    )
+            else:
+                notify_user(
+                    int(pay_uid),
+                    (
+                        f"✅ Сервисный сбор {w_fee} ⭐ оплачен с личного аккаунта.\n"
+                        "Откройте игру и нажмите «Вывести»."
+                    ),
+                )
+        return
+
     parsed = parse_topup_payload(payload)
     if parsed:
         pay_uid, pack_amount = parsed

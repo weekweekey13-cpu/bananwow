@@ -913,6 +913,42 @@
       background: radial-gradient(circle, #fff8d0 0%, #e0c05a 55%, transparent 80%);
     }
 
+    .fee-box {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0 0 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(201, 162, 39, 0.08);
+      border: 1px solid rgba(201, 162, 39, 0.28);
+    }
+
+    .fee-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .fee-row strong {
+      color: var(--gold);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .fee-row.total strong {
+      font-size: 1.05rem;
+    }
+
+    .fee-note {
+      text-align: center;
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.4;
+      margin: -6px 0 14px;
+    }
+
     .cost-pill {
       display: inline-flex;
       align-items: center;
@@ -1046,8 +1082,8 @@
         </div>
       </div>
       <div class="bar-actions">
-        <button type="button" class="withdraw-btn" id="tgWithdrawBtn" disabled title="From 110 ⭐">
-          Withdraw
+        <button type="button" class="withdraw-btn" id="tgWithdrawBtn" disabled title="От 110 ⭐">
+          Вывести
         </button>
         <button type="button" class="topup-btn" id="topupBtn">
           <span>+</span> Top up
@@ -1106,18 +1142,24 @@
 
   <div class="star-rain" id="starRain" aria-hidden="true"></div>
 
-  <!-- Вывод в Telegram Stars -->
+  <!-- Вывод в Telegram Stars — сервисный сбор 5% -->
   <div class="overlay" id="tgWithdrawOverlay" role="dialog" aria-modal="true">
     <div class="sheet">
       <div class="sheet-handle"></div>
-      <h2>Withdraw to Telegram</h2>
+      <h2>Вывод звёзд</h2>
       <p class="lead" id="tgWithdrawLead">
-        Move stars from your game balance to Telegram Stars.
-        Minimum — <strong>110 ⭐</strong>.
+        Для вывода звёзд на личный счет оплатите сервисный сбор 5%
       </p>
-      <div class="pill-row"><span class="cost-pill" id="tgWithdrawPill">⭐ 110</span></div>
-      <button type="button" class="btn" id="tgWithdrawConfirm">Withdraw 110 ⭐</button>
-      <button type="button" class="btn btn-ghost" id="tgWithdrawClose" style="margin-top:8px">Close</button>
+      <div class="fee-box" id="tgWithdrawFeeBox">
+        <div class="fee-row">Вывод с игры <strong id="tgWithdrawAmt">110 ⭐</strong></div>
+        <div class="fee-row total">Сбор 5% <strong id="tgWithdrawFee">6 ⭐</strong></div>
+      </div>
+      <p class="fee-note" id="tgWithdrawNote">
+        Сбор списывается со звёзд личного аккаунта Telegram, не с игрового баланса.
+      </p>
+      <div class="pill-row hidden" id="tgWithdrawPillWrap"><span class="cost-pill" id="tgWithdrawPill">⭐ 110</span></div>
+      <button type="button" class="btn" id="tgWithdrawConfirm">Оплатить</button>
+      <button type="button" class="btn btn-ghost" id="tgWithdrawClose" style="margin-top:8px">Закрыть</button>
       <p class="err" id="tgWithdrawErr"></p>
     </div>
   </div>
@@ -1150,6 +1192,8 @@
       let currentStake = 10;
       let WIN_PRIZE = 1000;
       let TG_WITHDRAW_MIN = 110;
+      let WITHDRAW_FEE_RATE = 0.05;
+      let withdrawFeePaid = false;
       let WIN_RATE = 0.35;
       let welcomeBonusAvailable = false;
       let FRUIT_MULT = {
@@ -1222,6 +1266,10 @@
       const tgWithdrawConfirm = document.getElementById("tgWithdrawConfirm");
       const tgWithdrawClose = document.getElementById("tgWithdrawClose");
       const tgWithdrawErr = document.getElementById("tgWithdrawErr");
+      const tgWithdrawAmt = document.getElementById("tgWithdrawAmt");
+      const tgWithdrawFee = document.getElementById("tgWithdrawFee");
+      const tgWithdrawFeeBox = document.getElementById("tgWithdrawFeeBox");
+      const tgWithdrawNote = document.getElementById("tgWithdrawNote");
 
       let deck = [];
       let attemptsLeft = MAX_ATTEMPTS;
@@ -1443,11 +1491,13 @@
 
         const canTg = balance >= TG_WITHDRAW_MIN;
         tgWithdrawBtn.disabled = !canTg;
-        tgWithdrawBtn.textContent = "Withdraw";
+        tgWithdrawBtn.textContent = "Вывести";
         tgWithdrawBtn.title = canTg
-          ? "Withdraw " + TG_WITHDRAW_MIN + " ⭐"
-          : "Need " + TG_WITHDRAW_MIN + " ⭐ (you have " + balance + ")";
-        tgWithdrawPill.textContent = "⭐ " + TG_WITHDRAW_MIN;
+          ? "Вывести " + TG_WITHDRAW_MIN + " ⭐"
+          : "Нужно " + TG_WITHDRAW_MIN + " ⭐ (у вас " + balance + ")";
+        if (tgWithdrawPill) tgWithdrawPill.textContent = "⭐ " + TG_WITHDRAW_MIN;
+        if (tgWithdrawAmt) tgWithdrawAmt.textContent = TG_WITHDRAW_MIN + " ⭐";
+        if (tgWithdrawFee) tgWithdrawFee.textContent = withdrawFeeAmount() + " ⭐";
         if (winRetryBtn) {
           winRetryBtn.textContent = isAdmin
             ? "Play again (free)"
@@ -2177,34 +2227,143 @@
         } catch (_) {}
       }
 
+      function withdrawFeeAmount(amount) {
+        const n = amount == null ? TG_WITHDRAW_MIN : Number(amount) || TG_WITHDRAW_MIN;
+        return Math.max(1, Math.ceil(n * WITHDRAW_FEE_RATE));
+      }
+
       function openTgWithdraw() {
         tgWithdrawErr.textContent = "";
+        const fee = withdrawFeeAmount();
+        if (tgWithdrawAmt) tgWithdrawAmt.textContent = TG_WITHDRAW_MIN + " ⭐";
+        if (tgWithdrawFee) tgWithdrawFee.textContent = fee + " ⭐";
+        if (tgWithdrawPill) tgWithdrawPill.textContent = "⭐ " + fee;
         if (balance < TG_WITHDRAW_MIN) {
           const need = TG_WITHDRAW_MIN - balance;
           tgWithdrawLead.innerHTML =
-            "Telegram withdraw from <strong>" +
+            "Вывод от <strong>" +
             TG_WITHDRAW_MIN +
-            " ⭐</strong>.<br>You have <strong>" +
+            " ⭐</strong>. У вас <strong>" +
             balance +
-            " ⭐</strong> — need <strong>" +
+            " ⭐</strong> — не хватает <strong>" +
             need +
-            " ⭐</strong> more. Top up.";
-          tgWithdrawConfirm.textContent = "Top up";
+            " ⭐</strong>.";
+          if (tgWithdrawFeeBox) tgWithdrawFeeBox.classList.add("hidden");
+          if (tgWithdrawNote) tgWithdrawNote.classList.add("hidden");
+          tgWithdrawConfirm.textContent = "Пополнить";
           tgWithdrawConfirm.dataset.mode = "topup";
         } else {
-          tgWithdrawLead.innerHTML =
-            "Deduct <strong>" +
-            TG_WITHDRAW_MIN +
-            " ⭐</strong> from game balance to Telegram Stars.";
-          tgWithdrawConfirm.textContent = "Withdraw " + TG_WITHDRAW_MIN + " ⭐";
-          tgWithdrawConfirm.dataset.mode = "withdraw";
+          tgWithdrawLead.textContent =
+            "Для вывода звёзд на личный счет оплатите сервисный сбор 5%";
+          if (tgWithdrawFeeBox) tgWithdrawFeeBox.classList.remove("hidden");
+          if (tgWithdrawNote) tgWithdrawNote.classList.remove("hidden");
+          if (withdrawFeePaid) {
+            tgWithdrawConfirm.textContent = "Вывести " + TG_WITHDRAW_MIN + " ⭐";
+            tgWithdrawConfirm.dataset.mode = "withdraw";
+          } else {
+            tgWithdrawConfirm.textContent = "Оплатить " + fee + " ⭐";
+            tgWithdrawConfirm.dataset.mode = "fee";
+          }
         }
-        tgWithdrawPill.textContent = "⭐ " + TG_WITHDRAW_MIN;
         tgWithdrawOverlay.classList.add("show");
       }
 
       function closeTgWithdraw() {
         tgWithdrawOverlay.classList.remove("show");
+      }
+
+      async function finishWithdrawAfterFee() {
+        const before = balance;
+        const { res, data } = await apiPost(
+          "/api/withdraw-telegram",
+          authBody({ amount: TG_WITHDRAW_MIN })
+        );
+        if (data && data.ok) {
+          withdrawFeePaid = false;
+          if (typeof data.balance === "number") setBalance(data.balance, true);
+          else setBalance(balance - TG_WITHDRAW_MIN, true);
+          closeTgWithdraw();
+          hintLine.textContent =
+            data.message || "Выведено " + TG_WITHDRAW_MIN + " ⭐ на личный счёт";
+          hintLine.className = "hint-line ok";
+          try {
+            if (tg && tg.HapticFeedback) {
+              tg.HapticFeedback.notificationOccurred("success");
+            }
+          } catch (_) {}
+          return true;
+        }
+        await refreshMe();
+        if (balance < before) {
+          withdrawFeePaid = false;
+          closeTgWithdraw();
+          hintLine.textContent = "Вывод выполнен";
+          hintLine.className = "hint-line ok";
+          return true;
+        }
+        if (data && data.error === "fee_required") {
+          withdrawFeePaid = false;
+          return false;
+        }
+        if (data && (data.error === "min_balance" || (res && res.status === 402))) {
+          if (typeof data.balance === "number") setBalance(data.balance, false);
+          throw new Error(data.message || "Недостаточно для вывода");
+        }
+        throw new Error((data && (data.message || data.error)) || "Ошибка вывода");
+      }
+
+      async function payWithdrawFee() {
+        if (!canOpenInvoice()) {
+          throw new Error("Откройте игру через кнопку Play в боте");
+        }
+        const { res, data } = await apiPost(
+          "/api/create-withdraw-fee",
+          authBody({ amount: TG_WITHDRAW_MIN })
+        );
+        if (data && data.free) {
+          return finishWithdrawAfterFee();
+        }
+        if (data && data.alreadyPaid) {
+          withdrawFeePaid = true;
+          return finishWithdrawAfterFee();
+        }
+        if (!res.ok || !data || !data.ok || !data.invoiceLink) {
+          throw new Error(
+            (data && (data.message || data.error)) || "Не удалось выставить сбор"
+          );
+        }
+        return new Promise(function (resolve, reject) {
+          tg.openInvoice(data.invoiceLink, async function (status) {
+            try {
+              if (status === "paid") {
+                await sleep(700);
+                withdrawFeePaid = true;
+                const done = await finishWithdrawAfterFee();
+                if (!done) {
+                  await refreshMe();
+                  if (balance >= TG_WITHDRAW_MIN && withdrawFeePaid) {
+                    await finishWithdrawAfterFee();
+                  }
+                }
+                resolve(true);
+              } else if (status === "cancelled") {
+                tgWithdrawErr.textContent = "Оплата отменена";
+                resolve(false);
+              } else if (status === "failed") {
+                tgWithdrawErr.textContent = "Оплата не прошла. Попробуйте ещё раз.";
+                resolve(false);
+              } else if (status === "pending") {
+                tgWithdrawErr.textContent = "Оплата обрабатывается…";
+                resolve(false);
+              } else {
+                tgWithdrawErr.textContent = "Статус: " + status;
+                resolve(false);
+              }
+            } catch (e) {
+              reject(e);
+            }
+          });
+        });
       }
 
       async function doTgWithdraw() {
@@ -2217,7 +2376,7 @@
         if (loading) return;
         if (balance < TG_WITHDRAW_MIN) {
           tgWithdrawErr.textContent =
-            "Need " + TG_WITHDRAW_MIN + " ⭐ (you have " + balance + ")";
+            "Нужно " + TG_WITHDRAW_MIN + " ⭐ (у вас " + balance + ")";
           return;
         }
         loading = true;
@@ -2225,41 +2384,20 @@
         try {
           if (!inTelegram && /[?&#]demo=1(?:&|$)/.test(location.href)) {
             setBalance(balance - TG_WITHDRAW_MIN, true);
-            tgWithdrawErr.textContent = "";
             closeTgWithdraw();
             hintLine.textContent =
-              "Demo: −" + TG_WITHDRAW_MIN + " ⭐ (TG withdraw)";
+              "Demo: сбор 5% с личного аккаунта + вывод " + TG_WITHDRAW_MIN + " ⭐";
             hintLine.className = "hint-line ok";
             return;
           }
-          const { res, data } = await apiPost(
-            "/api/withdraw-telegram",
-            authBody({ amount: TG_WITHDRAW_MIN })
-          );
-          if (data.ok) {
-            if (typeof data.balance === "number") setBalance(data.balance, true);
-            else setBalance(balance - TG_WITHDRAW_MIN, true);
-            closeTgWithdraw();
-            hintLine.textContent =
-              data.message || "Withdrew " + TG_WITHDRAW_MIN + " ⭐ to Telegram";
-            hintLine.className = "hint-line ok";
-            try {
-              if (tg && tg.HapticFeedback) {
-                tg.HapticFeedback.notificationOccurred("success");
-              }
-            } catch (_) {}
+          if (tgWithdrawConfirm.dataset.mode === "fee" || !withdrawFeePaid) {
+            await payWithdrawFee();
             return;
           }
-          if (data.error === "min_balance" || res.status === 402) {
-            if (typeof data.balance === "number") setBalance(data.balance, false);
-            tgWithdrawErr.textContent =
-              data.message || "Not enough to withdraw";
-            return;
-          }
-          throw new Error(data.message || data.error || "Withdraw error");
+          await finishWithdrawAfterFee();
         } catch (e) {
           console.error(e);
-          tgWithdrawErr.textContent = e.message || "Error";
+          tgWithdrawErr.textContent = e.message || "Ошибка";
         } finally {
           loading = false;
           tgWithdrawConfirm.disabled = false;
@@ -2397,6 +2535,12 @@
           if (data.winMultiplier) WIN_MULTIPLIER = data.winMultiplier;
           if (data.welcomeBonus) WELCOME_BONUS = data.welcomeBonus;
           if (data.tgWithdrawMin) TG_WITHDRAW_MIN = data.tgWithdrawMin;
+          if (typeof data.withdrawFeeRate === "number" && data.withdrawFeeRate > 0) {
+            WITHDRAW_FEE_RATE = data.withdrawFeeRate;
+          }
+          if (typeof data.withdrawFeePaid === "boolean") {
+            withdrawFeePaid = data.withdrawFeePaid;
+          }
           if (typeof data.winRate === "number") WIN_RATE = data.winRate;
           if (!applyFruitMultipliers(data.fruitMultipliers)) {
             applyPaytable(data.paytable);
