@@ -1128,7 +1128,7 @@
         <span id="winPrizeNum">+1000</span>
       </div>
       <p class="lead" id="winLead">Stars drop onto your game balance.</p>
-      <button type="button" class="btn btn-pulse" id="claimBtn">Забрать 1000 ⭐</button>
+      <button type="button" class="btn btn-pulse" id="claimBtn">Claim 500 ⭐</button>
       <div id="winAfterClaim" class="hidden" style="margin-top:10px;width:100%">
         <p class="hint-line ok" id="claimOk" style="margin-bottom:10px">Prize added!</p>
         <button type="button" class="btn" id="winRetryBtn">Play again · 10 ⭐</button>
@@ -1763,7 +1763,7 @@
         if (claimBtn) {
           claimBtn.classList.remove("hidden");
           claimBtn.disabled = false;
-          claimBtn.textContent = "Забрать " + prize + " ⭐";
+          claimBtn.textContent = "Claim " + prize + " ⭐";
         }
         if (winAfterClaim) winAfterClaim.classList.add("hidden");
         if (claimErr) claimErr.textContent = "";
@@ -2303,8 +2303,8 @@
         claimBtn.classList.add("hidden");
         winAfterClaim.classList.remove("hidden");
         claimOk.textContent =
-          "+" + WIN_PRIZE + " ⭐ упали на игровой счёт" +
-          (typeof bal === "number" ? " · итого " + bal : "") +
+          "+" + WIN_PRIZE + " ⭐ added to your game balance" +
+          (typeof bal === "number" ? " · total " + bal : "") +
           " 🎉";
         hintLine.textContent = "Prize on game balance";
         hintLine.className = "hint-line ok";
