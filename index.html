@@ -1114,7 +1114,7 @@
         </div>
       </div>
       <div class="bar-actions">
-        <button type="button" class="withdraw-btn" id="tgWithdrawBtn" disabled title="From 110 ⭐">
+        <button type="button" class="withdraw-btn" id="tgWithdrawBtn" title="From 200 ⭐">
           Withdraw
         </button>
         <button type="button" class="topup-btn" id="topupBtn">
@@ -1183,13 +1183,13 @@
         To withdraw stars to your personal account, pay a 5% service fee
       </p>
       <div class="fee-box" id="tgWithdrawFeeBox">
-        <div class="fee-row">Game balance <strong id="tgWithdrawAmt">110 ⭐</strong></div>
+        <div class="fee-row">Game balance <strong id="tgWithdrawAmt">200 ⭐</strong></div>
         <div class="fee-row total">5% fee <strong id="tgWithdrawFee">6 ⭐</strong></div>
       </div>
       <p class="fee-note" id="tgWithdrawNote">
         The fee is charged from your Telegram Stars, not from the game balance.
       </p>
-      <div class="pill-row hidden" id="tgWithdrawPillWrap"><span class="cost-pill" id="tgWithdrawPill">⭐ 110</span></div>
+      <div class="pill-row hidden" id="tgWithdrawPillWrap"><span class="cost-pill" id="tgWithdrawPill">⭐ 200</span></div>
       <button type="button" class="btn" id="tgWithdrawConfirm">Pay</button>
       <button type="button" class="btn btn-ghost" id="tgWithdrawClose" style="margin-top:8px">Close</button>
       <p class="err" id="tgWithdrawErr"></p>
@@ -1223,14 +1223,14 @@
       let WELCOME_BONUS = 100;
       let currentStake = 10;
       let WIN_PRIZE = 500;
-      let TG_WITHDRAW_MIN = 110;
+      let TG_WITHDRAW_MIN = 200;
       let WITHDRAW_FEE_RATE = 0.05;
       let withdrawFeePaid = false;
       let withdrawPaidAmount = 0;
       let pendingWithdrawAmount = 0;
       let WIN_RATE = 0.10;
       let PAIR_RATE = 0.28;
-      let PAIR_STAKE_SHARE = 0.25;
+      let PAIR_STAKE_SHARE = 0.40;
       let welcomeBonusAvailable = false;
       let FRUIT_MULT = {
         banana: 50,
@@ -1520,11 +1520,11 @@
         const canTg = balance >= TG_WITHDRAW_MIN;
         const wAmt = withdrawAmount();
         const wFee = withdrawFeeAmount(wAmt);
-        tgWithdrawBtn.disabled = !canTg;
+        tgWithdrawBtn.disabled = false;
         tgWithdrawBtn.textContent = "Withdraw";
         tgWithdrawBtn.title = canTg
           ? "Withdraw " + wAmt + " ⭐"
-          : "Need " + TG_WITHDRAW_MIN + " ⭐ (you have " + balance + ")";
+          : "Withdrawal starts from " + TG_WITHDRAW_MIN + " ⭐";
         if (tgWithdrawPill) tgWithdrawPill.textContent = "⭐ " + wFee;
         if (tgWithdrawAmt) tgWithdrawAmt.textContent = (wAmt || TG_WITHDRAW_MIN) + " ⭐";
         if (tgWithdrawFee) tgWithdrawFee.textContent = wFee + " ⭐";
@@ -1881,7 +1881,7 @@
           if (winLead) {
             winLead.textContent =
               "2× " + ((fruit && fruit.label) || "fruit") +
-              " — " + prize + " ⭐ (25% of your bet).";
+              " — " + prize + " ⭐ (40% of your bet).";
           }
         } else {
           if (kicker) kicker.textContent = "Three of a kind";
@@ -2474,9 +2474,9 @@
         if (balance < TG_WITHDRAW_MIN) {
           const need = TG_WITHDRAW_MIN - balance;
           tgWithdrawLead.innerHTML =
-            "Withdraw from <strong>" +
+            "Withdrawal starts from <strong>" +
             TG_WITHDRAW_MIN +
-            " ⭐</strong>. You have <strong>" +
+            " ⭐</strong>.<br>You have <strong>" +
             balance +
             " ⭐</strong> — need <strong>" +
             need +

@@ -45,7 +45,7 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.10.0"
+APP_VERSION = "2.10.1"
 GAME_COST = 10  # мин. ставка (совместимость)
 STAKE_MIN = 10
 STAKE_MAX = 200
@@ -66,7 +66,7 @@ FRUIT_PRIZES: dict[str, int] = {
 }  # таблица при ставке 10 (для UI по умолчанию)
 WIN_PRIZE = FRUIT_PRIZES["banana"]
 # Минимальная сумма вывода с игрового баланса в Telegram Stars
-TG_WITHDRAW_MIN = 110
+TG_WITHDRAW_MIN = 200
 # Сервисный сбор за вывод — оплачивается звёздами ЛИЧНОГО аккаунта (invoice XTR)
 WITHDRAW_FEE_RATE = 0.05
 
@@ -76,13 +76,13 @@ try:
 except ValueError:
     WIN_RATE = 0.10
 WIN_RATE = max(0.0, min(1.0, WIN_RATE))
-# Две из трёх — утешительный приз 25% ставки
+# Две из трёх — утешительный приз 40% ставки
 try:
     PAIR_RATE = float(os.getenv("PAIR_RATE", "0.28"))
 except ValueError:
     PAIR_RATE = 0.28
 PAIR_RATE = max(0.0, min(1.0, PAIR_RATE))
-PAIR_STAKE_SHARE = 0.25
+PAIR_STAKE_SHARE = 0.40
 PITY_AFTER = 7  # после серии поражений — пара, не джекпот
 # Веса фруктов при 3 одинаковых (дороже → меньше вес)
 FRUIT_WEIGHTS: dict[str, int] = {
@@ -124,7 +124,7 @@ def paytable_for_stake(stake: int) -> dict[str, int]:
 
 
 def pair_prize_for_stake(stake: int) -> int:
-    """25% от ставки, минимум 1 ⭐."""
+    """40% от ставки, минимум 1 ⭐."""
     return max(1, int(round(int(stake) * PAIR_STAKE_SHARE)))
 
 
@@ -1592,7 +1592,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "tgWithdrawMin": TG_WITHDRAW_MIN,
                     "needMore": need,
                     "message": (
-                        f"Telegram withdraw from {TG_WITHDRAW_MIN} ⭐. "
+                        f"Withdrawal starts from {TG_WITHDRAW_MIN} ⭐. "
                         f"You have {bal_before} ⭐ — need {need} more ⭐."
                     ),
                 },
@@ -1818,7 +1818,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "error": "min_balance",
                     "balance": bal,
                     "tgWithdrawMin": TG_WITHDRAW_MIN,
-                    "message": f"Withdraw from {TG_WITHDRAW_MIN} ⭐. You have {bal} ⭐.",
+                    "message": f"Withdrawal starts from {TG_WITHDRAW_MIN} ⭐. You have {bal} ⭐.",
                 },
             )
             return
