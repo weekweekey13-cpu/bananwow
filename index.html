@@ -1047,7 +1047,7 @@
     <div class="chips">
       <div class="chip" id="attemptsChip">Moves: <strong id="attempts">3</strong></div>
       <div class="chip" id="costChip">Bet: <strong id="costLabel">10 ⭐</strong></div>
-      <div class="chip" id="prizeChip">Jackpot: <strong id="prizeLabel">1000 ⭐</strong></div>
+      <div class="chip" id="prizeChip">Jackpot: <strong id="prizeLabel">500 ⭐</strong></div>
     </div>
 
     <div class="board-shell">
@@ -1061,8 +1061,6 @@
       </div>
       <input type="range" id="stakeRange" class="stake-range" min="10" max="200" step="10" value="10" />
       <div class="stake-presets" id="stakePresets"></div>
-      <div class="paytable" id="paytable"></div>
-      <p class="stake-hint">Prize = fruit × bet · 3🍌 at 10 = <strong>1000</strong>, at 30 = <strong>3000</strong></p>
     </div>
 
     <div class="play-area" id="playArea">
@@ -1190,25 +1188,25 @@
       let WIN_MULTIPLIER = 10;
       let WELCOME_BONUS = 100;
       let currentStake = 10;
-      let WIN_PRIZE = 1000;
+      let WIN_PRIZE = 500;
       let TG_WITHDRAW_MIN = 110;
       let WITHDRAW_FEE_RATE = 0.05;
       let withdrawFeePaid = false;
       let WIN_RATE = 0.35;
       let welcomeBonusAvailable = false;
       let FRUIT_MULT = {
-        banana: 100,
-        strawberry: 50,
-        cherry: 30,
-        lemon: 20,
-        grape: 15,
+        banana: 50,
+        strawberry: 25,
+        cherry: 15,
+        lemon: 10,
+        grape: 7.5,
       };
       let PAYTABLE = {
-        banana: 1000,
-        strawberry: 500,
-        cherry: 300,
-        lemon: 200,
-        grape: 150,
+        banana: 500,
+        strawberry: 250,
+        cherry: 150,
+        lemon: 100,
+        grape: 75,
       };
       let PACKAGES = [10, 30, 50, 100, 250];
       const STAKE_PRESETS = [10, 20, 50, 100, 200];
@@ -1363,7 +1361,7 @@
       function prizeForFruit(id, stake) {
         const s = stake == null ? currentStake : Number(stake) || currentStake;
         if (id && FRUIT_MULT[id] != null) {
-          return (Number(FRUIT_MULT[id]) || 0) * s;
+          return Math.round((Number(FRUIT_MULT[id]) || 0) * s);
         }
         if (id && PAYTABLE[id] != null) {
           return Math.round((Number(PAYTABLE[id]) || 0) * s / STAKE_MIN);
@@ -1460,23 +1458,7 @@
       }
 
       function renderPaytable() {
-        if (!paytableEl) return;
-        paytableEl.innerHTML = "";
-        FRUITS.forEach(function (f) {
-          const prize = prizeForFruit(f.id);
-          const item = document.createElement("div");
-          item.className = "pt-item" + (f.id === "banana" ? " jackpot" : "");
-          item.title = "3× " + f.label + " = " + prize + " ⭐";
-          const img = document.createElement("img");
-          img.src = f.icon;
-          img.alt = f.label;
-          img.draggable = false;
-          const lab = document.createElement("span");
-          lab.textContent = prize;
-          item.appendChild(img);
-          item.appendChild(lab);
-          paytableEl.appendChild(item);
-        });
+        /* таблица комбинаций убрана — мешала кнопке Play */
       }
 
       function refreshPlayUi() {
@@ -1837,12 +1819,16 @@
         } catch (_) {}
       }
 
-      const SFX_V = "20260812c";
+      const SFX_V = "20260812e";
       const sfxSrc = {
         coins: "assets/sounds/coins.mp3?v=" + SFX_V,
         win: "assets/sounds/win.mp3?v=" + SFX_V,
+        lose: "assets/sounds/lose.mp3?v=" + SFX_V,
       };
       const sfxBase = {};
+      let bgmEl = null;
+      const BGM_SRC = "assets/sounds/mood.mp3?v=" + SFX_V;
+      const BGM_VOL = 0.5;
 
       function getSfx(name) {
         if (!sfxBase[name] && sfxSrc[name]) {
@@ -1896,6 +1882,39 @@
 
       function playWinFanfare() {
         playSfx("win", 0.9);
+      }
+
+      function playLoseSound() {
+        playSfx("lose", 0.8);
+      }
+
+      function ensureBgm() {
+        if (bgmEl) return bgmEl;
+        try {
+          bgmEl = new Audio(BGM_SRC);
+          bgmEl.loop = true;
+          bgmEl.preload = "auto";
+          bgmEl.volume = BGM_VOL;
+        } catch (_) {
+          bgmEl = null;
+        }
+        return bgmEl;
+      }
+
+      function startBgm() {
+        const a = ensureBgm();
+        if (!a) return;
+        a.volume = BGM_VOL;
+        const p = a.play();
+        if (p && p.catch) p.catch(function () {});
+      }
+
+      function pauseBgm() {
+        if (bgmEl) {
+          try {
+            bgmEl.pause();
+          } catch (_) {}
+        }
       }
 
       function onCardClick(index, btn) {
@@ -2019,6 +2038,7 @@
 
             setTimeout(() => {
               loseOverlay.classList.add("show");
+              playLoseSound();
               try {
                 if (tg && tg.HapticFeedback) {
                   tg.HapticFeedback.notificationOccurred("error");
@@ -2854,9 +2874,15 @@
         function () {
           ensureAudio();
           primeSfx();
+          startBgm();
         },
         { once: true, passive: true }
       );
+
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "hidden") pauseBgm();
+        else startBgm();
+      });
 
       // Events
       playBtn.addEventListener("click", async () => {
@@ -2921,6 +2947,8 @@
           hideSplash();
           try {
             ensureAudio();
+            primeSfx();
+            startBgm();
           } catch (_) {}
           try {
             if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
@@ -2979,6 +3007,7 @@
       }
 
       async function playBonusDrop(nextBalance) {
+        startBgm();
         const from = balance;
         const originEl = document.querySelector(".bonus-amount") || claimBonusBtn;
         let origin = { x: window.innerWidth / 2, y: window.innerHeight * 0.42 };

@@ -45,24 +45,24 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.8.0"
+APP_VERSION = "2.9.0"
 GAME_COST = 10  # мин. ставка (совместимость)
 STAKE_MIN = 10
 STAKE_MAX = 200
 WIN_MULTIPLIER = 10  # устар.
 WELCOME_BONUS = 100  # приветственный бонус на баланс
 FREE_FIRST_PRIZE = 0
-# Множители к ставке: ставка 10 → банан 1000, ставка 30 → банан 3000
-FRUIT_MULT: dict[str, int] = {
-    "banana": 100,
-    "strawberry": 50,
-    "cherry": 30,
-    "lemon": 20,
-    "grape": 15,
+# Множители к ставке (в 2 раза меньше): ставка 10 → банан 500, ставка 30 → банан 1500
+FRUIT_MULT: dict[str, float] = {
+    "banana": 50,
+    "strawberry": 25,
+    "cherry": 15,
+    "lemon": 10,
+    "grape": 7.5,
 }
 FRUIT_IDS = tuple(FRUIT_MULT.keys())
 FRUIT_PRIZES: dict[str, int] = {
-    k: v * STAKE_MIN for k, v in FRUIT_MULT.items()
+    k: int(round(v * STAKE_MIN)) for k, v in FRUIT_MULT.items()
 }  # таблица при ставке 10 (для UI по умолчанию)
 WIN_PRIZE = FRUIT_PRIZES["banana"]
 # Минимальная сумма вывода с игрового баланса в Telegram Stars
@@ -100,8 +100,8 @@ def clamp_stake(raw) -> int:
 
 
 def prize_for_fruit(fruit: str, stake: int = STAKE_MIN) -> int:
-    """Приз = множитель фрукта × ставка (10→1000🍌, 30→3000🍌)."""
-    return int(FRUIT_MULT.get(fruit, 0)) * int(stake)
+    """Приз = множитель фрукта × ставка (10→500🍌, 30→1500🍌)."""
+    return int(round(float(FRUIT_MULT.get(fruit, 0)) * int(stake)))
 
 
 def paytable_for_stake(stake: int) -> dict[str, int]:
