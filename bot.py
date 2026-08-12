@@ -45,7 +45,7 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.9.0"
+APP_VERSION = "2.9.1"
 GAME_COST = 10  # мин. ставка (совместимость)
 STAKE_MIN = 10
 STAKE_MAX = 200
@@ -726,6 +726,25 @@ def mark_withdraw_fee_paid(payload: str) -> dict | None:
             conn.close()
 
 
+def get_latest_paid_fee(user_id: int) -> dict | None:
+    with _db_lock:
+        conn = _db()
+        try:
+            row = conn.execute(
+                """
+                SELECT id, withdraw_amount, fee_amount FROM withdraw_fees
+                WHERE user_id = ? AND status = 'paid'
+                ORDER BY id DESC LIMIT 1
+                """,
+                (int(user_id),),
+            ).fetchone()
+            return dict(row) if row else None
+        except sqlite3.OperationalError:
+            return None
+        finally:
+            conn.close()
+
+
 def has_usable_withdraw_fee(user_id: int, withdraw_amount: int) -> bool:
     with _db_lock:
         conn = _db()
@@ -1266,10 +1285,12 @@ class Handler(SimpleHTTPRequestHandler):
 
         balance = 0
         welcome_bonus = False
+        paid_fee = None
         if uid is not None:
             ensure_user(int(uid), uname, first_name)
             balance = get_balance(int(uid))
             welcome_bonus = is_welcome_bonus_available(int(uid))
+            paid_fee = get_latest_paid_fee(int(uid))
 
         log.info(
             "api/me verified=%s admin=%s user=%s id=%s bal=%s bonus=%s",
@@ -1292,9 +1313,9 @@ class Handler(SimpleHTTPRequestHandler):
                 "welcomeBonusAvailable": welcome_bonus,
                 "freePlayAvailable": False,
                 "canWithdrawTelegram": balance >= TG_WITHDRAW_MIN,
-                "withdrawFeePaid": bool(
-                    uid is not None
-                    and has_usable_withdraw_fee(int(uid), TG_WITHDRAW_MIN)
+                "withdrawFeePaid": bool(paid_fee),
+                "withdrawPaidAmount": (
+                    int(paid_fee["withdraw_amount"]) if paid_fee else 0
                 ),
             }
         )
@@ -1546,7 +1567,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "feeRate": WITHDRAW_FEE_RATE,
                     "tgWithdrawMin": TG_WITHDRAW_MIN,
                     "message": (
-                        "Для вывода звёзд на личный счет оплатите сервисный сбор 5%"
+                        "To withdraw stars to your personal account, pay a 5% service fee"
                     ),
                 },
             )
@@ -1565,7 +1586,7 @@ class Handler(SimpleHTTPRequestHandler):
                         "fee": fee,
                         "feeRate": WITHDRAW_FEE_RATE,
                         "message": (
-                            "Для вывода звёзд на личный счет оплатите сервисный сбор 5%"
+                            "To withdraw stars to your personal account, pay a 5% service fee"
                         ),
                     },
                 )
@@ -1746,7 +1767,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "error": "min_balance",
                     "balance": bal,
                     "tgWithdrawMin": TG_WITHDRAW_MIN,
-                    "message": f"Вывод от {TG_WITHDRAW_MIN} ⭐. У вас {bal} ⭐.",
+                    "message": f"Withdraw from {TG_WITHDRAW_MIN} ⭐. You have {bal} ⭐.",
                 },
             )
             return
@@ -1779,7 +1800,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "amount": amount,
                     "fee": fee,
                     "balance": bal,
-                    "message": "Сбор уже оплачен — можно выводить.",
+                    "message": "Fee already paid — you can withdraw.",
                 },
             )
             return
@@ -1789,16 +1810,16 @@ class Handler(SimpleHTTPRequestHandler):
             result = api_call(
                 "createInvoiceLink",
                 {
-                    "title": "Сервисный сбор 5%",
+                    "title": "5% service fee",
                     "description": (
-                        f"Сбор 5% за вывод {amount} ⭐ на личный счёт Telegram. "
-                        f"Оплата со звёзд вашего аккаунта — {fee} ⭐. "
-                        "Игровой баланс не списывается."
+                        f"5% service fee to withdraw {amount} ⭐ to your Telegram account. "
+                        f"Pay {fee} ⭐ from your personal Stars. "
+                        "The game balance is not charged."
                     ),
                     "payload": payload,
                     "provider_token": "",
                     "currency": "XTR",
-                    "prices": [{"label": f"Сбор 5% · {fee} ⭐", "amount": fee}],
+                    "prices": [{"label": f"5% fee · {fee} ⭐", "amount": fee}],
                 },
             )
             if not result.get("ok"):
