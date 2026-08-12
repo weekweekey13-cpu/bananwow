@@ -1837,6 +1837,71 @@
         } catch (_) {}
       }
 
+      function playCoinClink(ctx, t, pitch, vol) {
+        const o1 = ctx.createOscillator();
+        const o2 = ctx.createOscillator();
+        const g = ctx.createGain();
+        const hp = ctx.createBiquadFilter();
+        o1.type = "triangle";
+        o2.type = "sine";
+        o1.frequency.setValueAtTime(pitch, t);
+        o1.frequency.exponentialRampToValueAtTime(Math.max(180, pitch * 0.48), t + 0.09);
+        o2.frequency.setValueAtTime(pitch * 2.15, t);
+        o2.frequency.exponentialRampToValueAtTime(Math.max(280, pitch * 0.85), t + 0.07);
+        hp.type = "highpass";
+        hp.frequency.setValueAtTime(620, t);
+        hp.Q.setValueAtTime(0.7, t);
+        const peak = Math.max(0.03, Math.min(0.2, vol == null ? 0.14 : vol));
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(peak, t + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+        o1.connect(g);
+        o2.connect(g);
+        g.connect(hp);
+        hp.connect(ctx.destination);
+        o1.start(t);
+        o2.start(t);
+        o1.stop(t + 0.15);
+        o2.stop(t + 0.15);
+      }
+
+      function playCoinLand(ctx, t) {
+        const notes = [988, 1318, 1568];
+        for (let i = 0; i < notes.length; i++) {
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = i === 2 ? "triangle" : "sine";
+          const tt = t + i * 0.045;
+          o.frequency.setValueAtTime(notes[i], tt);
+          o.frequency.exponentialRampToValueAtTime(notes[i] * 0.92, tt + 0.22);
+          g.gain.setValueAtTime(0.0001, tt);
+          g.gain.exponentialRampToValueAtTime(0.15 - i * 0.03, tt + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.0001, tt + 0.32);
+          o.connect(g);
+          g.connect(ctx.destination);
+          o.start(tt);
+          o.stop(tt + 0.34);
+        }
+      }
+
+      function playCoinRainSound(count) {
+        try {
+          const ctx = ensureAudio();
+          if (!ctx) return;
+          if (ctx.state === "suspended") ctx.resume();
+          const n = Math.max(8, Math.min(22, count || 16));
+          const t0 = ctx.currentTime + 0.02;
+          for (let i = 0; i < n; i++) {
+            const delay = 0.04 + i * 0.038 + Math.random() * 0.018;
+            const pitch = 1320 + (i % 5) * 180 + Math.random() * 520;
+            const vol = 0.1 + (i / n) * 0.07;
+            playCoinClink(ctx, t0 + delay, pitch, vol);
+          }
+          const landAt = 0.04 + (n - 1) * 0.038 + 0.58;
+          playCoinLand(ctx, t0 + landAt);
+        } catch (_) {}
+      }
+
       function onCardClick(index, btn) {
         if (locked || !inRound || attemptsLeft <= 0) return;
         if (btn.classList.contains("flipped")) return;
@@ -2014,6 +2079,7 @@
           y: window.innerHeight * 0.38,
         };
         const dest = balanceTargetPoint();
+        playCoinRainSound(count);
         if (!starRain) return Promise.resolve();
         const waits = [];
         for (let i = 0; i < count; i++) {
