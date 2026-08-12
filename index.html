@@ -1699,15 +1699,32 @@
         const fruit = deck[index];
         const btn = cardEl(index);
         if (!btn || !fruit) return;
+        if (btn.classList.contains("flipped")) return;
         const img = btn.querySelector(".fruit-img");
         if (img) {
-          img.src = fruit.icon;
+          if (img.src !== fruit.icon) img.src = fruit.icon;
           img.alt = fruit.label;
         }
       }
 
-      /** Гарантирует нужный фрукт под картой (обмен с закрытой). */
+      function fruitImageReady(btn) {
+        const img = btn && btn.querySelector(".fruit-img");
+        if (!img) return Promise.resolve();
+        if (img.complete && img.naturalWidth) return Promise.resolve();
+        if (typeof img.decode === "function") {
+          return img.decode().catch(function () {});
+        }
+        return new Promise(function (resolve) {
+          img.onload = function () { resolve(); };
+          img.onerror = function () { resolve(); };
+          setTimeout(resolve, 80);
+        });
+      }
+
+      /** Ставит нужный фрукт под закрытую карту до переворота. */
       function ensureFruitAt(index, fruit) {
+        const btn = cardEl(index);
+        if (btn && btn.classList.contains("flipped")) return;
         if (deck[index] && deck[index].id === fruit.id) {
           updateCardVisual(index);
           return;
@@ -2028,39 +2045,39 @@
           if (!inRound) nudgePlayButton();
           return;
         }
-        if (btn.classList.contains("flipped")) return;
+        if (btn.classList.contains("flipped") || btn.dataset.opening === "1") return;
 
         const step = openCount;
         const planned = (openPlan && openPlan[step]) || (willWin ? matchFruit : pickOtherFruit());
+        btn.dataset.opening = "1";
+        btn.disabled = true;
         ensureFruitAt(index, planned);
 
-        btn.classList.add("flipped");
-        btn.disabled = true;
-        btn.setAttribute("aria-label", deck[index].label);
         const prevSame = openPlan.slice(0, step).some(function (f) {
           return f && planned && f.id === planned.id;
         });
-        if (willWin || prevSame) btn.classList.add("match-ok");
-        else if (step > 0) btn.classList.add("mismatch");
-
         openCount += 1;
         openedOrder.push(index);
         attemptsLeft -= 1;
         attemptsEl.textContent = String(attemptsLeft);
+        if (attemptsLeft === 0) locked = true;
 
-        playCardFlipSound();
-        requestAnimationFrame(function () {
+        fruitImageReady(btn).then(function () {
+          if (!btn.isConnected) return;
+          btn.classList.add("flipped");
+          btn.setAttribute("aria-label", (deck[index] && deck[index].label) || "Card");
+          if (willWin || prevSame) btn.classList.add("match-ok");
+          else if (step > 0) btn.classList.add("mismatch");
+          playCardFlipSound();
           try {
             if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
           } catch (_) {}
+          if (attemptsLeft === 0) {
+            if (willWin) setTimeout(finishWin, 700);
+            else if (pairWin) setTimeout(function () { finishWin(true); }, 700);
+            else setTimeout(finishLose, 750);
+          }
         });
-
-        if (attemptsLeft === 0) {
-          locked = true;
-          if (willWin) setTimeout(finishWin, 700);
-          else if (pairWin) setTimeout(function () { finishWin(true); }, 700);
-          else setTimeout(finishLose, 750);
-        }
       }
 
       function findMissedMatchIndex() {
