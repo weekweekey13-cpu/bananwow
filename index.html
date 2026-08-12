@@ -221,6 +221,10 @@
     }
 
     /* ── Board ── */
+    .board-shell.wait-play {
+      cursor: pointer;
+    }
+
     .board-shell {
       width: 100%;
       position: relative;
@@ -441,6 +445,34 @@
     .btn-pulse {
       /* без бесконечной анимации — меньше лагов в Telegram WebView */
       box-shadow: 0 8px 24px rgba(201, 162, 39, 0.4);
+    }
+
+    .btn.nudge-play {
+      animation: nudge-play 0.85s ease;
+      z-index: 5;
+    }
+
+    @keyframes nudge-play {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 8px 24px rgba(201, 162, 39, 0.4);
+      }
+      18% {
+        transform: scale(1.07);
+        box-shadow:
+          0 0 0 4px rgba(240, 216, 120, 0.55),
+          0 0 36px rgba(201, 162, 39, 0.95);
+      }
+      40% {
+        transform: scale(1.02);
+        box-shadow: 0 8px 24px rgba(201, 162, 39, 0.5);
+      }
+      58% {
+        transform: scale(1.08);
+        box-shadow:
+          0 0 0 5px rgba(240, 216, 120, 0.65),
+          0 0 40px rgba(240, 216, 120, 1);
+      }
     }
 
     #hintLine { display: none !important; }
@@ -1052,7 +1084,7 @@
       <div class="chip" id="prizeChip">Jackpot: <strong id="prizeLabel">500 ⭐</strong></div>
     </div>
 
-    <div class="board-shell">
+    <div class="board-shell wait-play" id="boardShell">
       <div class="board locked preview" id="board" aria-label="Game board"></div>
     </div>
 
@@ -1217,6 +1249,7 @@
       const ADMIN_USERNAMES = ["bonamartin69"];
 
       const boardEl = document.getElementById("board");
+      const boardShell = document.getElementById("boardShell");
       const attemptsEl = document.getElementById("attempts");
       const attemptsChip = document.getElementById("attemptsChip");
       const costLabel = document.getElementById("costLabel");
@@ -1496,12 +1529,14 @@
           playArea.classList.add("hidden");
           attemptsChip.classList.add("live");
           boardEl.classList.remove("preview");
+          if (boardShell) boardShell.classList.remove("wait-play");
           return;
         }
 
         playArea.classList.remove("hidden");
         attemptsChip.classList.remove("live");
         boardEl.classList.add("preview");
+        if (boardShell) boardShell.classList.add("wait-play");
 
         if (isAdmin) {
           playBtn.textContent = "Play";
@@ -1923,8 +1958,28 @@
         }
       }
 
+      function nudgePlayButton() {
+        if (!playBtn || inRound) return;
+        playArea && playArea.classList.remove("hidden");
+        try {
+          playBtn.scrollIntoView({ behavior: "smooth", block: "center" });
+        } catch (_) {}
+        playBtn.classList.remove("nudge-play");
+        void playBtn.offsetWidth;
+        playBtn.classList.add("nudge-play");
+        setTimeout(function () {
+          playBtn.classList.remove("nudge-play");
+        }, 900);
+        try {
+          if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("medium");
+        } catch (_) {}
+      }
+
       function onCardClick(index, btn) {
-        if (locked || !inRound || attemptsLeft <= 0) return;
+        if (!inRound || locked || attemptsLeft <= 0) {
+          if (!inRound) nudgePlayButton();
+          return;
+        }
         if (btn.classList.contains("flipped")) return;
 
         // 1-я и 2-я — всегда match; 3-я — match при выигрыше, иначе другой
@@ -2914,6 +2969,12 @@
         if (document.visibilityState === "hidden") pauseBgm();
         else startBgm();
       });
+
+      if (boardShell) {
+        boardShell.addEventListener("click", function () {
+          if (!inRound) nudgePlayButton();
+        });
+      }
 
       // Events
       playBtn.addEventListener("click", async () => {
