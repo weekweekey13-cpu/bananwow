@@ -993,7 +993,7 @@
       </div>
       <div id="splashDefault" class="hidden">
         <h1>Find 3 identical</h1>
-        <p class="subtitle">3 moves · win chance <strong>1 in 5</strong></p>
+        <p class="subtitle">3 moves · prize scales with your <strong>bet</strong></p>
         <button type="button" class="btn btn-pulse" id="splashStartBtn">Start</button>
       </div>
       <div id="splashBonus" class="hidden">
@@ -1026,7 +1026,7 @@
       <input type="range" id="stakeRange" class="stake-range" min="10" max="200" step="10" value="10" />
       <div class="stake-presets" id="stakePresets"></div>
       <div class="paytable" id="paytable"></div>
-      <p class="stake-hint">Win chance <strong>1 in 5</strong> · prize by fruit</p>
+      <p class="stake-hint">Prize = fruit × bet · 3🍌 at 10 = <strong>1000</strong>, at 30 = <strong>3000</strong></p>
     </div>
 
     <div class="play-area" id="playArea">
@@ -1150,8 +1150,15 @@
       let currentStake = 10;
       let WIN_PRIZE = 1000;
       let TG_WITHDRAW_MIN = 110;
-      let WIN_RATE = 0.2;
+      let WIN_RATE = 0.35;
       let welcomeBonusAvailable = false;
+      let FRUIT_MULT = {
+        banana: 100,
+        strawberry: 50,
+        cherry: 30,
+        lemon: 20,
+        grape: 15,
+      };
       let PAYTABLE = {
         banana: 1000,
         strawberry: 500,
@@ -1305,18 +1312,19 @@
         }
       }
 
-      function jackpotPrize() {
-        let max = 0;
-        Object.keys(PAYTABLE).forEach(function (k) {
-          const n = Number(PAYTABLE[k]) || 0;
-          if (n > max) max = n;
-        });
-        return max || 1000;
+      function prizeForFruit(id, stake) {
+        const s = stake == null ? currentStake : Number(stake) || currentStake;
+        if (id && FRUIT_MULT[id] != null) {
+          return (Number(FRUIT_MULT[id]) || 0) * s;
+        }
+        if (id && PAYTABLE[id] != null) {
+          return Math.round((Number(PAYTABLE[id]) || 0) * s / STAKE_MIN);
+        }
+        return 0;
       }
 
-      function prizeForFruit(id) {
-        if (id && PAYTABLE[id] != null) return Number(PAYTABLE[id]) || 0;
-        return 0;
+      function jackpotPrize() {
+        return prizeForFruit("banana") || currentStake * 100;
       }
 
       function fruitById(id) {
@@ -1347,6 +1355,7 @@
         if (prizeLabel) {
           prizeLabel.textContent = previewPrize() + " ⭐";
         }
+        renderPaytable();
         if (stakePresets) {
           const kids = stakePresets.children;
           for (let i = 0; i < kids.length; i++) {
@@ -1460,7 +1469,8 @@
           playBtn.textContent = "Play";
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.remove("attention");
-          hintLine.textContent = "Admin · 1 in 5 · banana " + prizeForFruit("banana") + " ⭐";
+          hintLine.textContent =
+            "Admin · 3🍌 = " + prizeForFruit("banana") + " ⭐ at this bet";
           hintLine.className = "hint-line ok";
           retryBtn.textContent = "Play";
           return;
@@ -1479,7 +1489,13 @@
           playBtn.classList.add("btn-pulse");
           topupBtn.classList.remove("attention");
           hintLine.textContent =
-            "Bet " + currentStake + " ⭐ · 1 in 5 · jackpot " + previewPrize() + " ⭐";
+            "Bet " +
+            currentStake +
+            " ⭐ · 3🍌 = " +
+            prizeForFruit("banana") +
+            " · 3🍓 = " +
+            prizeForFruit("strawberry") +
+            " ⭐";
           hintLine.className = "hint-line ok";
         } else {
           playBtn.classList.add("btn-pulse");
@@ -2331,6 +2347,19 @@
         }
       }
 
+      function applyFruitMultipliers(raw) {
+        if (!raw || typeof raw !== "object") return false;
+        const next = {};
+        Object.keys(raw).forEach(function (k) {
+          const n = Number(raw[k]);
+          if (n > 0) next[k] = n;
+        });
+        if (!Object.keys(next).length) return false;
+        FRUIT_MULT = next;
+        renderPaytable();
+        return true;
+      }
+
       function applyPaytable(raw) {
         if (!raw || typeof raw !== "object") return;
         const next = {};
@@ -2340,6 +2369,11 @@
         });
         if (Object.keys(next).length) {
           PAYTABLE = next;
+          Object.keys(next).forEach(function (k) {
+            if (FRUIT_MULT[k] == null) {
+              FRUIT_MULT[k] = Math.round(next[k] / Math.max(STAKE_MIN, 1));
+            }
+          });
           renderPaytable();
         }
       }
@@ -2364,7 +2398,9 @@
           if (data.welcomeBonus) WELCOME_BONUS = data.welcomeBonus;
           if (data.tgWithdrawMin) TG_WITHDRAW_MIN = data.tgWithdrawMin;
           if (typeof data.winRate === "number") WIN_RATE = data.winRate;
-          applyPaytable(data.paytable);
+          if (!applyFruitMultipliers(data.fruitMultipliers)) {
+            applyPaytable(data.paytable);
+          }
           if (typeof data.welcomeBonusAvailable === "boolean") {
             welcomeBonusAvailable = data.welcomeBonusAvailable;
             try {
@@ -2455,7 +2491,9 @@
           if (data && typeof data.welcomeBonusAvailable === "boolean") {
             welcomeBonusAvailable = data.welcomeBonusAvailable;
           }
-          applyPaytable(data && data.paytable);
+          if (data && !applyFruitMultipliers(data.fruitMultipliers)) {
+            applyPaytable(data.paytable);
+          }
 
           if (data && data.ok) {
             if (typeof data.balance === "number") setBalance(data.balance, true);

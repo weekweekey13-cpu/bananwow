@@ -44,32 +44,36 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.7.0"
 GAME_COST = 10  # мин. ставка (совместимость)
 STAKE_MIN = 10
 STAKE_MAX = 200
-WIN_MULTIPLIER = 10  # устар.: выигрыш теперь по фрукту, не ×ставка
-WELCOME_BONUS = 100  # приветственный бонус на баланс (вместо free-игры на 9⭐)
-FREE_FIRST_PRIZE = 0  # больше нет бесплатной гарантированной игры
-# Призы за 3 одинаковых (фиксированные)
-FRUIT_PRIZES: dict[str, int] = {
-    "banana": 1000,
-    "strawberry": 500,
-    "cherry": 300,
-    "lemon": 200,
-    "grape": 150,
+WIN_MULTIPLIER = 10  # устар.
+WELCOME_BONUS = 100  # приветственный бонус на баланс
+FREE_FIRST_PRIZE = 0
+# Множители к ставке: ставка 10 → банан 1000, ставка 30 → банан 3000
+FRUIT_MULT: dict[str, int] = {
+    "banana": 100,
+    "strawberry": 50,
+    "cherry": 30,
+    "lemon": 20,
+    "grape": 15,
 }
-FRUIT_IDS = tuple(FRUIT_PRIZES.keys())
-WIN_PRIZE = FRUIT_PRIZES["banana"]  # джекпот для UI
+FRUIT_IDS = tuple(FRUIT_MULT.keys())
+FRUIT_PRIZES: dict[str, int] = {
+    k: v * STAKE_MIN for k, v in FRUIT_MULT.items()
+}  # таблица при ставке 10 (для UI по умолчанию)
+WIN_PRIZE = FRUIT_PRIZES["banana"]
 # Минимальная сумма вывода с игрового баланса в Telegram Stars
 TG_WITHDRAW_MIN = 110
 
-# Шанс выигрыша (0..1). 1 к 5 = 0.20
+# Базовый шанс + pity: после PITY_AFTER проигрышей подряд — гарантированный выигрыш
 try:
-    WIN_RATE = float(os.getenv("WIN_RATE", "0.2"))
+    WIN_RATE = float(os.getenv("WIN_RATE", "0.35"))
 except ValueError:
-    WIN_RATE = 0.2
+    WIN_RATE = 0.35
 WIN_RATE = max(0.0, min(1.0, WIN_RATE))
+PITY_AFTER = 3  # 4-я игра после 3 поражений — выигрыш
 
 # Пакеты пополнения: сколько ⭐ купить (= сумма XTR)
 TOPUP_PACKAGES = (10, 30, 50, 100, 250)
@@ -83,15 +87,26 @@ def clamp_stake(raw) -> int:
     return max(STAKE_MIN, min(STAKE_MAX, n))
 
 
-def prize_for_fruit(fruit: str) -> int:
-    return int(FRUIT_PRIZES.get(fruit, 0))
+def prize_for_fruit(fruit: str, stake: int = STAKE_MIN) -> int:
+    """Приз = множитель фрукта × ставка (10→1000🍌, 30→3000🍌)."""
+    return int(FRUIT_MULT.get(fruit, 0)) * int(stake)
 
 
-def pick_round() -> tuple[bool, str, int]:
-    """Случайный исход: (will_win, fruit_id, prize). Шанс 1 к 5."""
+def paytable_for_stake(stake: int) -> dict[str, int]:
+    return {k: prize_for_fruit(k, stake) for k in FRUIT_IDS}
+
+
+def pick_round(
+    stake: int = STAKE_MIN,
+    user_id: int | None = None,
+) -> tuple[bool, str, int]:
+    """Исход раунда: (will_win, fruit_id, prize). Приз зависит от ставки."""
     fruit = random.choice(FRUIT_IDS)
     will_win = random.random() < WIN_RATE
-    prize = prize_for_fruit(fruit) if will_win else 0
+    if not will_win and user_id is not None:
+        if get_loss_streak(int(user_id)) >= PITY_AFTER:
+            will_win = True
+    prize = prize_for_fruit(fruit, stake) if will_win else 0
     return will_win, fruit, prize
 
 
@@ -106,7 +121,9 @@ def public_game_config() -> dict:
         "winPrize": WIN_PRIZE,
         "tgWithdrawMin": TG_WITHDRAW_MIN,
         "winRate": WIN_RATE,
-        "paytable": dict(FRUIT_PRIZES),
+        "pityAfter": PITY_AFTER,
+        "paytable": paytable_for_stake(STAKE_MIN),
+        "fruitMultipliers": dict(FRUIT_MULT),
         "packages": list(TOPUP_PACKAGES),
         "stars": GAME_COST,
     }
@@ -190,6 +207,7 @@ def init_db() -> None:
                     user_id INTEGER PRIMARY KEY,
                     first_play_done INTEGER NOT NULL DEFAULT 0,
                     welcome_bonus_claimed INTEGER NOT NULL DEFAULT 0,
+                    loss_streak INTEGER NOT NULL DEFAULT 0,
                     username TEXT,
                     first_name TEXT,
                     created_at REAL NOT NULL,
@@ -215,6 +233,7 @@ def init_db() -> None:
                 "ALTER TABLE users ADD COLUMN last_seen REAL NOT NULL DEFAULT 0",
                 "ALTER TABLE sessions ADD COLUMN fruit TEXT",
                 "ALTER TABLE users ADD COLUMN welcome_bonus_claimed INTEGER NOT NULL DEFAULT 0",
+                "ALTER TABLE users ADD COLUMN loss_streak INTEGER NOT NULL DEFAULT 0",
             ):
                 try:
                     conn.execute(col_sql)
@@ -279,6 +298,48 @@ def _user_bonus_claimed(row) -> bool:
     if "welcome_bonus_claimed" in keys:
         return int(row["welcome_bonus_claimed"] or 0) == 1
     return int(row["first_play_done"] or 0) == 1
+
+
+def get_loss_streak(user_id: int) -> int:
+    uid = int(user_id)
+    with _db_lock:
+        conn = _db()
+        try:
+            try:
+                row = conn.execute(
+                    "SELECT loss_streak FROM users WHERE user_id = ?",
+                    (uid,),
+                ).fetchone()
+            except sqlite3.OperationalError:
+                return 0
+            if not row:
+                return 0
+            return max(0, int(row["loss_streak"] or 0))
+        finally:
+            conn.close()
+
+
+def note_round_result(user_id: int, won: bool) -> None:
+    uid = int(user_id)
+    with _db_lock:
+        conn = _db()
+        try:
+            if won:
+                sql = "UPDATE users SET loss_streak = 0 WHERE user_id = ?"
+                conn.execute(sql, (uid,))
+            else:
+                try:
+                    conn.execute(
+                        "UPDATE users SET loss_streak = COALESCE(loss_streak, 0) + 1 WHERE user_id = ?",
+                        (uid,),
+                    )
+                except sqlite3.OperationalError:
+                    pass
+            conn.commit()
+        except sqlite3.OperationalError:
+            conn.rollback()
+        finally:
+            conn.close()
 
 
 def mark_first_play_done(user_id: int) -> None:
@@ -977,7 +1038,9 @@ class Handler(SimpleHTTPRequestHandler):
             "win_prize": WIN_PRIZE,
             "tg_withdraw_min": TG_WITHDRAW_MIN,
             "win_rate": WIN_RATE,
-            "paytable": dict(FRUIT_PRIZES),
+            "pity_after": PITY_AFTER,
+            "paytable": paytable_for_stake(STAKE_MIN),
+            "fruit_multipliers": dict(FRUIT_MULT),
             "last_external_ping_sec_ago": age,
             "ping_url": "/api/ping",
             "setup_url": "/keepalive-setup",
@@ -1144,13 +1207,14 @@ class Handler(SimpleHTTPRequestHandler):
         )
         is_admin = admin or (soft and not verified)
         stake = clamp_stake(body.get("stake") or body.get("amount") or STAKE_MIN)
-        will_win, fruit, prize = pick_round()
+        will_win, fruit, prize = pick_round(stake, uid)
 
-        # --- admin: играет бесплатно, тот же шанс 1 к 5 ---
+        # --- admin: играет бесплатно, тот же шанс ---
         if is_admin:
             bal = get_balance(int(uid)) if uid else 0
             sid = ""
             if uid is not None:
+                note_round_result(int(uid), will_win)
                 sid = create_session(
                     int(uid), will_win, prize, free=True, fruit=fruit
                 )
@@ -1208,6 +1272,7 @@ class Handler(SimpleHTTPRequestHandler):
             )
             return
 
+        note_round_result(int(uid), will_win)
         sid = create_session(int(uid), will_win, prize, free=False, fruit=fruit)
         log.info(
             "play user=%s bal=%s win=%s fruit=%s stake=%s prize=%s session=%s",
@@ -1599,7 +1664,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
             "👑 Admin mode\n\n"
             "Use the buttons below to manage the bot.\n"
-            "Find 3 identical · 1 in 5 · banana 1000⭐\n"
+            "Find 3 identical · prize = fruit × bet\n"
             "Or tap Play 👇"
         )
     else:
@@ -1608,7 +1673,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🎰 BANANAWOW\n\n"
             f"{bonus_line}"
             "Find 3 identical fruits in 3 moves.\n"
-            f"Win chance 1 in 5 · 3 bananas = {FRUIT_PRIZES['banana']} ⭐\n"
+            f"3 bananas = bet × {FRUIT_MULT['banana']} "
+            f"(10⭐ → {prize_for_fruit('banana', 10)}, "
+            f"30⭐ → {prize_for_fruit('banana', 30)})\n"
             f"Balance: {bal} ⭐\n\n"
             "Tap Play 👇"
         )
@@ -1639,10 +1706,12 @@ async def cmd_balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"⭐ Balance: {bal}\n"
         f"Welcome bonus: {bonus_txt}\n"
-        f"Bet {STAKE_MIN}–{STAKE_MAX} ⭐ · 1 in 5\n"
-        f"3🍌 {FRUIT_PRIZES['banana']} · 3🍓 {FRUIT_PRIZES['strawberry']} · "
-        f"3🍒 {FRUIT_PRIZES['cherry']} · 3🍋 {FRUIT_PRIZES['lemon']} · "
-        f"3🍇 {FRUIT_PRIZES['grape']}\n\n"
+        f"Bet {STAKE_MIN}–{STAKE_MAX} ⭐ · prize scales with bet\n"
+        f"At 10⭐: 3🍌 {prize_for_fruit('banana', 10)} · "
+        f"3🍓 {prize_for_fruit('strawberry', 10)} · "
+        f"3🍒 {prize_for_fruit('cherry', 10)}\n"
+        f"At 30⭐: 3🍌 {prize_for_fruit('banana', 30)} · "
+        f"3🍓 {prize_for_fruit('strawberry', 30)}\n\n"
         "Top up inside the mini app.",
         reply_markup=keyboard_for(u),
     )
