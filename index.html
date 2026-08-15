@@ -1155,7 +1155,7 @@
 
     <div class="board-shell wait-play" id="boardShell">
       <div class="board locked preview" id="board" aria-label="Game board"></div>
-      <!-- v=2.13.0 star fountain then magnet to balance -->
+      <!-- v=2.13.1 organic random star scatter -->
       <div class="result-fx" id="resultFx" aria-hidden="true">
         <div class="result-title" id="resultTitle"></div>
         <div class="result-prize hidden" id="resultPrize">
@@ -2262,28 +2262,46 @@
         const sy = origin.y - 14;
         const tx = dest.x - 10;
         const ty = dest.y - 10;
-        for (let i = 0; i < count; i++) {
+        const rnd = function (a, b) {
+          return a + Math.random() * (b - a);
+        };
+        const order = [];
+        for (let i = 0; i < count; i++) order.push(i);
+        for (let i = order.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const tmp = order[i];
+          order[i] = order[j];
+          order[j] = tmp;
+        }
+        for (let n = 0; n < count; n++) {
+          const i = order[n];
           const star = document.createElement("div");
-          star.className = "fly-star" + (i % 4 === 0 ? " lg" : i % 3 === 0 ? " sm" : "");
+          const roll = Math.random();
+          star.className = "fly-star" + (roll > 0.78 ? " lg" : roll < 0.28 ? " sm" : "");
           star.textContent = "⭐";
           starRain.appendChild(star);
-          const ang = (Math.PI * 2 * i) / count - Math.PI / 2;
-          const bx = origin.x + Math.cos(ang) * ring - 14;
-          const by = origin.y + Math.sin(ang) * ring - 14;
-          const delay = i * 16;
+          const ang = (Math.PI * 2 * i) / count - Math.PI / 2 + rnd(-0.55, 0.55);
+          const dist = ring * rnd(0.52, 1.28);
+          const bx = origin.x + Math.cos(ang) * dist - 14;
+          const by = origin.y + Math.sin(ang) * dist - 14;
+          const delay = rnd(0, 90) + n * rnd(10, 32);
+          const popScale = rnd(1.05, 1.42);
           const pop = star.animate(
             [
               {
-                transform: "translate(" + sx + "px," + sy + "px) scale(0.15)",
+                transform: "translate(" + sx + "px," + sy + "px) scale(0.12) rotate(0deg)",
                 opacity: 0,
               },
               {
-                transform: "translate(" + bx + "px," + by + "px) scale(1.28)",
+                transform:
+                  "translate(" + bx + "px," + by + "px) scale(" + popScale + ") rotate(" +
+                  rnd(-28, 28) +
+                  "deg)",
                 opacity: 1,
               },
             ],
             {
-              duration: 360,
+              duration: rnd(260, 430),
               delay: delay,
               easing: "cubic-bezier(0.16, 1, 0.3, 1)",
               fill: "forwards",
@@ -2295,11 +2313,12 @@
                 const fly = star.animate(
                   [
                     {
-                      transform: "translate(" + bx + "px," + by + "px) scale(1.28)",
+                      transform:
+                        "translate(" + bx + "px," + by + "px) scale(" + popScale + ")",
                       opacity: 1,
                     },
                     {
-                      transform: "translate(" + tx + "px," + ty + "px) scale(0.38)",
+                      transform: "translate(" + tx + "px," + ty + "px) scale(0.36)",
                       opacity: 1,
                       offset: 0.9,
                     },
@@ -2309,8 +2328,8 @@
                     },
                   ],
                   {
-                    duration: 640,
-                    delay: 80,
+                    duration: rnd(500, 820),
+                    delay: rnd(30, 170),
                     easing: "cubic-bezier(0.55, 0.02, 0.18, 1)",
                     fill: "forwards",
                   }
