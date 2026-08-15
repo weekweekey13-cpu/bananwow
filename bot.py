@@ -31,7 +31,14 @@ from urllib.parse import parse_qsl, urlparse
 from urllib.request import Request, urlopen
 
 from dotenv import load_dotenv
-from telegram import KeyboardButton, ReplyKeyboardMarkup, Update, WebAppInfo
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    Update,
+    WebAppInfo,
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -45,7 +52,7 @@ ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 
 APP_NAME = "bananawow"
-APP_VERSION = "2.10.1"
+APP_VERSION = "2.11.0"
 GAME_COST = 10  # мин. ставка (совместимость)
 STAKE_MIN = 10
 STAKE_MAX = 200
@@ -2001,7 +2008,7 @@ def start_http():
     server.serve_forever()
 
 
-def _webapp_url() -> str:
+def _webapp_url(user=None) -> str:
     global WEBAPP_URL
     fresh = detect_public_url() or WEBAPP_URL
     if fresh:
@@ -2009,13 +2016,27 @@ def _webapp_url() -> str:
     url = WEBAPP_URL or f"http://127.0.0.1:{PORT}/"
     if not url.endswith("/"):
         url += "/"
-    return url
+    extra = "v=" + APP_VERSION
+    if user is not None and getattr(user, "id", None):
+        extra += "&uid=" + str(int(user.id))
+    return url + "?" + extra
 
 
 def play_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [[KeyboardButton(text="🎮 Play", web_app=WebAppInfo(url=_webapp_url()))]],
         resize_keyboard=True,
+    )
+
+
+def play_inline(user=None) -> InlineKeyboardMarkup:
+    """web_app + обычная ссылка: если Telegram не пускает Mini App на новый домен."""
+    href = _webapp_url(user)
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton(text="🎮 Play", web_app=WebAppInfo(url=href))],
+            [InlineKeyboardButton(text="🎮 Open game", url=href)],
+        ]
     )
 
 
@@ -2104,7 +2125,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Balance: {bal} ⭐\n\n"
             "Tap Play 👇"
         )
-    await update.message.reply_text(text, reply_markup=keyboard_for(user))
+    await update.message.reply_text(text, reply_markup=play_inline(user))
+    await update.message.reply_text("Menu", reply_markup=keyboard_for(user))
 
 
 async def cmd_play(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2485,7 +2507,7 @@ def main():
         )
     elif BOT_TOKEN:
         try:
-            set_menu_button(WEBAPP_URL if WEBAPP_URL.endswith("/") else WEBAPP_URL + "/")
+            set_menu_button(_webapp_url())
         except Exception:
             log.exception("set_menu_button (non-fatal)")
 

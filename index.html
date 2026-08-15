@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
   <title>BANANAWOW — find 3 fruits</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
@@ -25,6 +26,11 @@
       margin: 0;
       padding: 0;
       -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    input[type="range"] {
+      touch-action: auto;
     }
 
     html, body {
@@ -69,10 +75,8 @@
       background:
         radial-gradient(ellipse 100% 70% at 50% 20%, #2a2414 0%, transparent 55%),
         rgba(7, 7, 10, 0.96);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
       opacity: 1;
-      transition: opacity 0.35s ease, visibility 0.35s ease;
+      transition: opacity 0.15s ease, visibility 0.15s ease;
     }
 
     .splash.hide {
@@ -250,7 +254,7 @@
     }
 
     .board.preview .card {
-      filter: brightness(0.85);
+      opacity: 0.88;
     }
 
     .card,
@@ -272,7 +276,6 @@
       padding: 0;
       margin: 0;
       border-radius: 14px;
-      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
       -webkit-appearance: none;
       appearance: none;
       overflow: visible;
@@ -294,27 +297,19 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
-      transition:
-        transform 0.16s cubic-bezier(0.25, 0.8, 0.3, 1),
-        opacity 0.08s linear;
     }
 
     .face-back {
       z-index: 2;
       opacity: 1;
-      transform: scaleX(1);
-      background: linear-gradient(145deg, #2a2a38 0%, #16161e 55%, #1c1c28 100%);
+      background: #1c1c26;
       border: 1.5px solid var(--gold-dim);
-      box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.07),
-        inset 0 0 22px rgba(201, 162, 39, 0.07);
     }
 
     .face-front {
       z-index: 1;
       opacity: 0;
-      transform: scaleX(0);
-      background: linear-gradient(160deg, #2e2e3a 0%, #1a1a22 100%);
+      background: #1a1a22;
       border: 1.5px solid rgba(201, 162, 39, 0.35);
       pointer-events: none;
     }
@@ -322,30 +317,17 @@
     .card.flipped .face-back {
       z-index: 1;
       opacity: 0;
-      transform: scaleX(0);
-      transition:
-        transform 0.12s cubic-bezier(0.4, 0.1, 0.2, 1),
-        opacity 0.08s linear;
       pointer-events: none;
     }
 
     .card.flipped .face-front {
       z-index: 2;
       opacity: 1;
-      transform: scaleX(1);
-      transition:
-        transform 0.14s cubic-bezier(0.22, 1, 0.36, 1) 0.05s,
-        opacity 0.08s linear 0.05s;
       pointer-events: auto;
     }
 
-    .card.shake .face-front {
-      animation: shake 0.32s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
-    }
-
     .card.dim .face {
-      opacity: 0.32 !important;
-      transition: opacity 0.16s ease;
+      opacity: 0.34 !important;
     }
 
     /* Третья одинаковая, которую «не нашли» */
@@ -368,7 +350,6 @@
 
     .card.match-ok .face-front {
       border-color: rgba(109, 206, 160, 0.75) !important;
-      box-shadow: 0 0 16px rgba(109, 206, 160, 0.35);
     }
 
     .card.mismatch .face-front {
@@ -411,10 +392,8 @@
       background: linear-gradient(180deg, #f0d878 0%, #c9a227 55%, #a8861a 100%);
       padding: 16px 24px;
       border-radius: 16px;
-      box-shadow:
-        0 8px 24px rgba(201, 162, 39, 0.35),
-        inset 0 1px 0 rgba(255, 255, 255, 0.35);
-      transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
+      box-shadow: none;
+      transition: none;
       width: 100%;
       position: relative;
       overflow: hidden;
@@ -729,11 +708,8 @@
       align-items: flex-end;
       justify-content: center;
       background: rgba(5, 5, 8, 0.72);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.35s ease;
       z-index: 40;
       padding: 16px 14px calc(16px + var(--safe-b));
     }
@@ -755,17 +731,10 @@
       border: 1px solid rgba(201, 162, 39, 0.35);
       box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
       padding: 20px 18px 18px;
-      transform: translateY(24px);
-      transition: transform 0.4s cubic-bezier(0.34, 1.15, 0.64, 1);
     }
 
     .overlay.center .sheet {
       border-radius: 22px;
-      transform: translateY(12px) scale(0.96);
-    }
-
-    .overlay.show .sheet {
-      transform: translateY(0) scale(1);
     }
 
     .sheet-handle {
@@ -931,10 +900,8 @@
       top: 0;
       z-index: 91;
       pointer-events: none;
-      font-size: 22px;
+      font-size: 20px;
       line-height: 1;
-      will-change: transform, opacity;
-      filter: drop-shadow(0 0 8px rgba(240, 216, 120, 0.85));
     }
 
     .spark {
@@ -1054,7 +1021,7 @@
 
     .result-fx {
       position: absolute;
-      inset: 10px;
+      inset: 0;
       z-index: 8;
       display: flex;
       flex-direction: column;
@@ -1062,90 +1029,49 @@
       justify-content: center;
       pointer-events: none;
       opacity: 0;
-      visibility: hidden;
-      transition: opacity 0.16s ease, visibility 0.16s ease;
     }
 
     .result-fx.show {
       opacity: 1;
-      visibility: visible;
-    }
-
-    .result-fx.show::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: 16px;
-      background: radial-gradient(ellipse at center, rgba(7, 7, 10, 0.12) 0%, rgba(7, 7, 10, 0.52) 78%);
-    }
-
-    .result-title,
-    .result-prize {
-      position: relative;
-      z-index: 1;
     }
 
     .result-title {
-      font-size: clamp(2rem, 12vw, 3.15rem);
+      font-size: clamp(2.1rem, 13vw, 3.3rem);
       font-weight: 900;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       line-height: 0.95;
       text-align: center;
+      text-shadow: 0 2px 0 #07070a, 0 0 10px rgba(0, 0, 0, 0.85);
     }
 
     .result-fx.victory .result-title {
-      background: linear-gradient(180deg, #fff8d6 0%, #f0d878 46%, #c9a227 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-      filter: drop-shadow(0 0 18px rgba(240, 216, 120, 0.55));
-      animation: result-slam 0.34s cubic-bezier(0.22, 1.28, 0.36, 1) both;
+      color: #f0d878;
     }
 
     .result-fx.defeat .result-title {
-      color: #ff6d6d;
-      text-shadow: 0 0 22px rgba(224, 80, 80, 0.55);
-      animation: result-slam 0.3s cubic-bezier(0.22, 1.28, 0.36, 1) both;
+      color: #ff7a7a;
     }
 
     .result-prize {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      margin-top: 10px;
-      font-size: 1.85rem;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 1.55rem;
       font-weight: 800;
       color: var(--gold);
       font-variant-numeric: tabular-nums;
-      text-shadow: 0 0 18px rgba(240, 216, 120, 0.4);
-      animation: result-prize-in 0.28s cubic-bezier(0.22, 1.2, 0.36, 1) 0.06s both;
+      text-shadow: 0 2px 0 #07070a, 0 0 8px rgba(0, 0, 0, 0.8);
     }
 
     .result-prize .star {
-      font-size: 1.45rem;
-      filter: drop-shadow(0 0 8px rgba(240, 216, 120, 0.8));
+      font-size: 1.2rem;
     }
 
     .result-prize.burst {
-      animation: result-prize-burst 0.26s ease forwards;
-    }
-
-    @keyframes result-slam {
-      0% { transform: scale(0.42); opacity: 0; }
-      72% { transform: scale(1.08); opacity: 1; }
-      100% { transform: scale(1); opacity: 1; }
-    }
-
-    @keyframes result-prize-in {
-      0% { transform: scale(0.6); opacity: 0; }
-      100% { transform: scale(1); opacity: 1; }
-    }
-
-    @keyframes result-prize-burst {
-      0% { transform: scale(1); opacity: 1; }
-      100% { transform: scale(1.4); opacity: 0; }
+      opacity: 0;
     }
 
     .hidden { display: none !important; }
@@ -1184,6 +1110,7 @@
 
     <div class="board-shell wait-play" id="boardShell">
       <div class="board locked preview" id="board" aria-label="Game board"></div>
+      <!-- v=2.11.0 no-modal result text -->
       <div class="result-fx" id="resultFx" aria-hidden="true">
         <div class="result-title" id="resultTitle"></div>
         <div class="result-prize hidden" id="resultPrize">
@@ -1566,7 +1493,11 @@
           b.className = "stake-preset" + (s === currentStake ? " active" : "");
           b.dataset.stake = String(s);
           b.textContent = s;
-          b.addEventListener("click", () => setStake(s));
+          b.addEventListener("pointerdown", function (e) {
+            if (e.pointerType === "mouse" && e.button !== 0) return;
+            e.preventDefault();
+            setStake(s);
+          });
           stakePresets.appendChild(b);
         });
       }
@@ -1842,6 +1773,7 @@
           btn.addEventListener("pointerdown", function (e) {
             if (e.pointerType === "mouse" && e.button !== 0) return;
             e.preventDefault();
+            e.stopPropagation();
             onCardClick(index, btn);
           });
           boardEl.appendChild(btn);
@@ -2081,26 +2013,20 @@
         }
       }
 
-      function nudgePlayButton() {
-        if (!playBtn || inRound) return;
-        playArea && playArea.classList.remove("hidden");
-        try {
-          playBtn.scrollIntoView({ behavior: "smooth", block: "center" });
-        } catch (_) {}
-        playBtn.classList.remove("nudge-play");
-        void playBtn.offsetWidth;
-        playBtn.classList.add("nudge-play");
-        setTimeout(function () {
-          playBtn.classList.remove("nudge-play");
-        }, 900);
-        try {
-          if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("medium");
-        } catch (_) {}
+      function requestPlay() {
+        if (loading || inRound) return;
+        hideResultFx();
+        playPlaySound();
+        if (!isAdmin && balance < currentStake) {
+          openTopup();
+          return;
+        }
+        startPlayFromBalance(null);
       }
 
       function onCardClick(index, btn) {
         if (!inRound || locked || attemptsLeft <= 0) {
-          if (!inRound) nudgePlayButton();
+          if (!inRound) requestPlay();
           return;
         }
         if (btn.classList.contains("flipped") || btn.dataset.opening === "1") return;
@@ -2130,11 +2056,9 @@
           if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
         } catch (_) {}
         if (attemptsLeft === 0) {
-          requestAnimationFrame(function () {
-            if (willWin) finishWin();
-            else if (pairWin) finishWin(true);
-            else finishLose();
-          });
+          if (willWin) finishWin();
+          else if (pairWin) finishWin(true);
+          else finishLose();
         }
       }
 
@@ -2160,7 +2084,7 @@
         const cards = Array.from(boardEl.querySelectorAll(".card"));
         const thirdIdx = openedOrder[2];
         const thirdBtn = thirdIdx != null ? cardEl(thirdIdx) : null;
-        if (thirdBtn) thirdBtn.classList.add("shake", "mismatch");
+        if (thirdBtn) thirdBtn.classList.add("mismatch");
 
         cards.forEach((c) => {
           const i = Number(c.dataset.index);
@@ -2239,8 +2163,8 @@
           const jy = (Math.random() - 0.5) * 70;
           const midX = origin.x + jx;
           const midY = origin.y + jy + 30;
-          const delay = i * 16;
-          const dur = 460 + Math.random() * 140;
+          const delay = i * 12;
+          const dur = 380 + Math.random() * 80;
           const anim = star.animate(
             [
               {
@@ -2354,9 +2278,8 @@
 
       function flyPrizeToBalance() {
         const origin = prizeOriginPoint();
-        const n = WIN_PRIZE >= 1000 ? 18 : WIN_PRIZE >= 500 ? 14 : 11;
+        const n = WIN_PRIZE >= 500 ? 8 : 6;
         if (resultPrize) resultPrize.classList.add("burst");
-        burstSparks(origin.x, origin.y, pairWin ? 10 : 14);
         rainStarsToBalance({ count: n, origin: origin });
       }
 
@@ -2399,9 +2322,6 @@
           return false;
         })();
 
-        await new Promise(function (resolve) {
-          setTimeout(resolve, 140);
-        });
         flyPrizeToBalance();
 
         const claimed = await claimP;
@@ -2665,14 +2585,6 @@
 
       function setBusy(on) {
         loading = !!on;
-        if (playBtn) playBtn.disabled = !!on;
-        if (playBtn && on) {
-          playBtn.dataset.prevText = playBtn.textContent;
-          playBtn.textContent = "Loading…";
-        } else if (playBtn && playBtn.dataset.prevText) {
-          // text восстановит refreshPlayUi
-          delete playBtn.dataset.prevText;
-        }
       }
 
       function showPlayError(msg) {
@@ -3016,37 +2928,46 @@
       });
 
       if (boardShell) {
-        boardShell.addEventListener("click", function () {
-          if (!inRound) nudgePlayButton();
+        boardShell.addEventListener("pointerdown", function () {
+          if (!inRound) requestPlay();
         });
       }
 
-      // Events
       playBtn.addEventListener("pointerdown", function (e) {
-        if (playBtn.disabled) return;
         if (e.pointerType === "mouse" && e.button !== 0) return;
-        playPlaySound();
-      });
-      playBtn.addEventListener("click", async () => {
-        hideResultFx();
-        if (!isAdmin && balance < currentStake) {
-          openTopup();
-          return;
-        }
-        await startPlayFromBalance(null);
+        e.preventDefault();
+        requestPlay();
       });
 
-      tgWithdrawBtn.addEventListener("click", openTgWithdraw);
-      tgWithdrawClose.addEventListener("click", closeTgWithdraw);
-      tgWithdrawConfirm.addEventListener("click", () => {
+      tgWithdrawBtn.addEventListener("pointerdown", function (e) {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        e.preventDefault();
+        openTgWithdraw();
+      });
+      tgWithdrawClose.addEventListener("pointerdown", function (e) {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        e.preventDefault();
+        closeTgWithdraw();
+      });
+      tgWithdrawConfirm.addEventListener("pointerdown", function (e) {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        e.preventDefault();
         doTgWithdraw();
       });
       tgWithdrawOverlay.addEventListener("click", (e) => {
         if (e.target === tgWithdrawOverlay) closeTgWithdraw();
       });
 
-      topupBtn.addEventListener("click", openTopup);
-      topupClose.addEventListener("click", closeTopup);
+      topupBtn.addEventListener("pointerdown", function (e) {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        e.preventDefault();
+        openTopup();
+      });
+      topupClose.addEventListener("pointerdown", function (e) {
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        e.preventDefault();
+        closeTopup();
+      });
       topupOverlay.addEventListener("click", (e) => {
         if (e.target === topupOverlay) closeTopup();
       });
