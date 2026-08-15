@@ -253,6 +253,15 @@
       filter: brightness(0.85);
     }
 
+    .card,
+    .btn,
+    .stake-preset,
+    .pkg,
+    .topup-btn,
+    .withdraw-btn {
+      touch-action: manipulation;
+    }
+
     .card {
       position: relative;
       width: 100%;
@@ -286,8 +295,8 @@
       justify-content: center;
       overflow: hidden;
       transition:
-        transform 0.55s cubic-bezier(0.4, 0.1, 0.2, 1),
-        opacity 0.2s linear;
+        transform 0.16s cubic-bezier(0.25, 0.8, 0.3, 1),
+        opacity 0.08s linear;
     }
 
     .face-back {
@@ -315,8 +324,8 @@
       opacity: 0;
       transform: scaleX(0);
       transition:
-        transform 0.28s cubic-bezier(0.4, 0.1, 0.2, 1),
-        opacity 0.12s linear 0.16s;
+        transform 0.12s cubic-bezier(0.4, 0.1, 0.2, 1),
+        opacity 0.08s linear;
       pointer-events: none;
     }
 
@@ -325,18 +334,18 @@
       opacity: 1;
       transform: scaleX(1);
       transition:
-        transform 0.32s cubic-bezier(0.34, 1.2, 0.64, 1) 0.22s,
-        opacity 0.1s linear 0.22s;
+        transform 0.14s cubic-bezier(0.22, 1, 0.36, 1) 0.05s,
+        opacity 0.08s linear 0.05s;
       pointer-events: auto;
     }
 
     .card.shake .face-front {
-      animation: shake 0.55s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+      animation: shake 0.32s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
     }
 
     .card.dim .face {
-      opacity: 0.35 !important;
-      transition: opacity 0.5s ease;
+      opacity: 0.32 !important;
+      transition: opacity 0.16s ease;
     }
 
     /* Третья одинаковая, которую «не нашли» */
@@ -411,14 +420,7 @@
       overflow: hidden;
     }
 
-    .btn::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.18) 50%, transparent 60%);
-      transform: translateX(-120%);
-      animation: shine 3.5s ease-in-out infinite;
-    }
+    .btn::after { display: none; }
 
     .btn:disabled {
       opacity: 0.55;
@@ -1050,6 +1052,102 @@
       50% { filter: brightness(1.18); }
     }
 
+    .result-fx {
+      position: absolute;
+      inset: 10px;
+      z-index: 8;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.16s ease, visibility 0.16s ease;
+    }
+
+    .result-fx.show {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .result-fx.show::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 16px;
+      background: radial-gradient(ellipse at center, rgba(7, 7, 10, 0.12) 0%, rgba(7, 7, 10, 0.52) 78%);
+    }
+
+    .result-title,
+    .result-prize {
+      position: relative;
+      z-index: 1;
+    }
+
+    .result-title {
+      font-size: clamp(2rem, 12vw, 3.15rem);
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      line-height: 0.95;
+      text-align: center;
+    }
+
+    .result-fx.victory .result-title {
+      background: linear-gradient(180deg, #fff8d6 0%, #f0d878 46%, #c9a227 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 18px rgba(240, 216, 120, 0.55));
+      animation: result-slam 0.34s cubic-bezier(0.22, 1.28, 0.36, 1) both;
+    }
+
+    .result-fx.defeat .result-title {
+      color: #ff6d6d;
+      text-shadow: 0 0 22px rgba(224, 80, 80, 0.55);
+      animation: result-slam 0.3s cubic-bezier(0.22, 1.28, 0.36, 1) both;
+    }
+
+    .result-prize {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 1.85rem;
+      font-weight: 800;
+      color: var(--gold);
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 0 18px rgba(240, 216, 120, 0.4);
+      animation: result-prize-in 0.28s cubic-bezier(0.22, 1.2, 0.36, 1) 0.06s both;
+    }
+
+    .result-prize .star {
+      font-size: 1.45rem;
+      filter: drop-shadow(0 0 8px rgba(240, 216, 120, 0.8));
+    }
+
+    .result-prize.burst {
+      animation: result-prize-burst 0.26s ease forwards;
+    }
+
+    @keyframes result-slam {
+      0% { transform: scale(0.42); opacity: 0; }
+      72% { transform: scale(1.08); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes result-prize-in {
+      0% { transform: scale(0.6); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes result-prize-burst {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
+
     .hidden { display: none !important; }
   </style>
 </head>
@@ -1086,6 +1184,13 @@
 
     <div class="board-shell wait-play" id="boardShell">
       <div class="board locked preview" id="board" aria-label="Game board"></div>
+      <div class="result-fx" id="resultFx" aria-hidden="true">
+        <div class="result-title" id="resultTitle"></div>
+        <div class="result-prize hidden" id="resultPrize">
+          <span class="star">⭐</span>
+          <span id="resultPrizeNum"></span>
+        </div>
+      </div>
     </div>
 
     <div class="stake-box" id="stakeBox">
@@ -1136,41 +1241,7 @@
     </div>
   </div>
 
-  <!-- Проигрыш -->
-  <div class="overlay center" id="loseOverlay" role="dialog" aria-modal="true">
-    <div class="sheet">
-      <div class="lose-emoji">🙈</div>
-      <h2>So close!</h2>
-      <p class="lead" id="loseLead">The third match was right there. Try again — luck favors the bold!</p>
-      <div class="pill-row"><span class="cost-pill" id="loseCostPill">⭐ 10 per game</span></div>
-      <button type="button" class="btn" id="retryBtn">Play again · 10 ⭐</button>
-      <button type="button" class="btn btn-ghost" id="loseClose" style="margin-top:8px">Home</button>
-      <p class="err" id="retryErr"></p>
-    </div>
-  </div>
-
-  <!-- Выигрыш + вывод на игровой баланс -->
-  <div class="overlay center" id="winOverlay" role="dialog" aria-modal="true">
-    <div class="sheet win-sheet">
-      <div class="win-fruit-wrap">
-        <img id="winFruitImg" class="win-fruit-img" alt="" />
-      </div>
-      <p class="win-kicker">Three of a kind</p>
-      <h2 id="winTitle">You won!</h2>
-      <div class="win-prize" id="winPrizeBig">
-        <span class="star">⭐</span>
-        <span id="winPrizeNum">+1000</span>
-      </div>
-      <p class="lead" id="winLead">Stars drop onto your game balance.</p>
-      <button type="button" class="btn btn-pulse" id="claimBtn">Claim 500 ⭐</button>
-      <div id="winAfterClaim" class="hidden" style="margin-top:10px;width:100%">
-        <p class="hint-line ok" id="claimOk" style="margin-bottom:10px">Prize added!</p>
-        <button type="button" class="btn" id="winRetryBtn">Play again · 10 ⭐</button>
-        <button type="button" class="btn btn-ghost" id="winClose" style="margin-top:8px">Home</button>
-      </div>
-      <p class="err" id="claimErr"></p>
-    </div>
-  </div>
+  <!-- Result banners (Victory / Defeat) live on the board, not in a modal -->
 
   <div class="star-rain" id="starRain" aria-hidden="true"></div>
 
@@ -1269,24 +1340,11 @@
       const topupClose = document.getElementById("topupClose");
       const topupErr = document.getElementById("topupErr");
       const packagesEl = document.getElementById("packages");
-      const loseOverlay = document.getElementById("loseOverlay");
-      const retryBtn = document.getElementById("retryBtn");
-      const loseClose = document.getElementById("loseClose");
-      const retryErr = document.getElementById("retryErr");
-      const loseCostPill = document.getElementById("loseCostPill");
       const playArea = document.getElementById("playArea");
-      const winOverlay = document.getElementById("winOverlay");
-      const claimBtn = document.getElementById("claimBtn");
-      const claimErr = document.getElementById("claimErr");
-      const claimOk = document.getElementById("claimOk");
-      const winAfterClaim = document.getElementById("winAfterClaim");
-      const winRetryBtn = document.getElementById("winRetryBtn");
-      const winClose = document.getElementById("winClose");
-      const winLead = document.getElementById("winLead");
-      const winTitle = document.getElementById("winTitle");
-      const winFruitImg = document.getElementById("winFruitImg");
-      const winPrizeNum = document.getElementById("winPrizeNum");
-      const winPrizeBig = document.getElementById("winPrizeBig");
+      const resultFx = document.getElementById("resultFx");
+      const resultTitle = document.getElementById("resultTitle");
+      const resultPrize = document.getElementById("resultPrize");
+      const resultPrizeNum = document.getElementById("resultPrizeNum");
       const splashEl = document.getElementById("splash");
       const splashLoading = document.getElementById("splashLoading");
       const splashDefault = document.getElementById("splashDefault");
@@ -1339,7 +1397,16 @@
         }
       } catch (_) {}
 
+      function ticketUid() {
+        try {
+          const u = new URLSearchParams(window.location.search).get("uid");
+          if (u && /^\d+$/.test(u)) return Number(u);
+        } catch (_) {}
+        return null;
+      }
+
       function isInsideTelegram() {
+        if (ticketUid()) return true;
         if (!tg) return false;
         const platform = String(tg.platform || "").toLowerCase();
         if (platform && platform !== "unknown") return true;
@@ -1366,6 +1433,7 @@
       function localUserId() {
         return (
           (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) ||
+          ticketUid() ||
           null
         );
       }
@@ -1511,7 +1579,6 @@
         const stakeTxt = currentStake + " ⭐";
         costLabel.textContent = isAdmin ? "free" : stakeTxt;
         if (prizeLabel) prizeLabel.textContent = previewPrize() + " ⭐";
-        loseCostPill.textContent = isAdmin ? "👑 free" : "⭐ bet " + currentStake;
 
         if (stakeBox) {
           stakeBox.classList.toggle("disabled", !!inRound);
@@ -1528,11 +1595,6 @@
         if (tgWithdrawPill) tgWithdrawPill.textContent = "⭐ " + wFee;
         if (tgWithdrawAmt) tgWithdrawAmt.textContent = (wAmt || TG_WITHDRAW_MIN) + " ⭐";
         if (tgWithdrawFee) tgWithdrawFee.textContent = wFee + " ⭐";
-        if (winRetryBtn) {
-          winRetryBtn.textContent = isAdmin
-            ? "Play again (free)"
-            : "Play again · " + currentStake + " ⭐";
-        }
 
         if (inRound) {
           playArea.classList.add("hidden");
@@ -1554,15 +1616,7 @@
           hintLine.textContent =
             "Admin · 3🍌 = " + prizeForFruit("banana") + " ⭐ at this bet";
           hintLine.className = "hint-line ok";
-          retryBtn.textContent = "Play";
           return;
-        }
-
-        retryBtn.textContent =
-          balance >= currentStake ? "Play" : "Top up & play";
-        if (winRetryBtn) {
-          winRetryBtn.textContent =
-            balance >= currentStake ? "Play" : "Top up & play";
         }
 
         playBtn.textContent = playButtonLabel();
@@ -1785,7 +1839,11 @@
           inner.appendChild(back);
           inner.appendChild(front);
           btn.appendChild(inner);
-          btn.addEventListener("click", () => onCardClick(index, btn));
+          btn.addEventListener("pointerdown", function (e) {
+            if (e.pointerType === "mouse" && e.button !== 0) return;
+            e.preventDefault();
+            onCardClick(index, btn);
+          });
           boardEl.appendChild(btn);
         });
       }
@@ -1801,6 +1859,7 @@
         deck = generateRiggedDeck();
         renderBoard();
         boardEl.classList.add("locked", "preview");
+        hideResultFx();
         refreshPlayUi();
       }
 
@@ -1834,9 +1893,7 @@
           buildOpenPlan();
           renderBoard();
           if (boardEl) boardEl.classList.remove("locked", "preview");
-          if (loseOverlay) loseOverlay.classList.remove("show");
-          if (winOverlay) winOverlay.classList.remove("show");
-          prepareWinSheet();
+          hideResultFx();
           try {
             closeTopup();
           } catch (_) {}
@@ -1857,39 +1914,32 @@
         }
       }
 
-      function prepareWinSheet() {
-        const fruit = matchFruit || fruitById(forcedMatchId);
-        const prize = WIN_PRIZE || (pairWin
-          ? pairPrizeForStake(currentStake)
-          : prizeForFruit(fruit && fruit.id));
-        if (claimBtn) {
-          claimBtn.classList.remove("hidden");
-          claimBtn.disabled = false;
-          claimBtn.textContent = "Claim " + prize + " ⭐";
+      function hideResultFx() {
+        if (!resultFx) return;
+        resultFx.className = "result-fx";
+        resultFx.setAttribute("aria-hidden", "true");
+        if (resultPrize) {
+          resultPrize.classList.add("hidden");
+          resultPrize.classList.remove("burst");
         }
-        if (winAfterClaim) winAfterClaim.classList.add("hidden");
-        if (claimErr) claimErr.textContent = "";
-        if (winPrizeNum) winPrizeNum.textContent = "+" + prize;
-        if (winFruitImg && fruit) {
-          winFruitImg.src = fruit.icon;
-          winFruitImg.alt = fruit.label;
+        if (resultTitle) resultTitle.textContent = "";
+        if (resultPrizeNum) resultPrizeNum.textContent = "";
+      }
+
+      function showResultFx(kind, prize) {
+        if (!resultFx) return;
+        resultFx.className = "result-fx show " + kind;
+        resultFx.setAttribute("aria-hidden", "false");
+        if (resultTitle) {
+          resultTitle.textContent = kind === "victory" ? "Victory" : "Defeat";
         }
-        const kicker = document.querySelector(".win-kicker");
-        if (pairWin) {
-          if (kicker) kicker.textContent = "Two of a kind";
-          if (winTitle) winTitle.textContent = fruit ? "Pair of " + fruit.label + "s!" : "Pair!";
-          if (winLead) {
-            winLead.textContent =
-              "2× " + ((fruit && fruit.label) || "fruit") +
-              " — " + prize + " ⭐ (40% of your bet).";
-          }
-        } else {
-          if (kicker) kicker.textContent = "Three of a kind";
-          if (winTitle && fruit) winTitle.textContent = "3× " + fruit.label + "!";
-          if (winLead) {
-            winLead.textContent = fruit
-              ? "3× " + fruit.label + " — " + prize + " ⭐ drop onto your game balance."
-              : prize + " ⭐ drop onto your game balance.";
+        if (resultPrize) {
+          if (kind === "victory" && prize) {
+            resultPrize.classList.remove("hidden", "burst");
+            if (resultPrizeNum) resultPrizeNum.textContent = "+" + prize;
+          } else {
+            resultPrize.classList.add("hidden");
+            resultPrize.classList.remove("burst");
           }
         }
       }
@@ -1975,8 +2025,16 @@
         try {
           const base = getSfx(name);
           if (!base) return;
+          const v = vol == null ? 0.82 : vol;
+          if (base.paused || base.ended || base.currentTime === 0) {
+            base.volume = v;
+            try { base.currentTime = 0; } catch (_) {}
+            const p = base.play();
+            if (p && p.catch) p.catch(function () {});
+            return;
+          }
           const a = base.cloneNode(true);
-          a.volume = vol == null ? 0.82 : vol;
+          a.volume = v;
           const p = a.play();
           if (p && p.catch) p.catch(function () {});
         } catch (_) {}
@@ -2062,22 +2120,22 @@
         attemptsEl.textContent = String(attemptsLeft);
         if (attemptsLeft === 0) locked = true;
 
-        fruitImageReady(btn).then(function () {
-          if (!btn.isConnected) return;
-          btn.classList.add("flipped");
-          btn.setAttribute("aria-label", (deck[index] && deck[index].label) || "Card");
-          if (willWin || prevSame) btn.classList.add("match-ok");
-          else if (step > 0) btn.classList.add("mismatch");
-          playCardFlipSound();
-          try {
-            if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
-          } catch (_) {}
-          if (attemptsLeft === 0) {
-            if (willWin) setTimeout(finishWin, 700);
-            else if (pairWin) setTimeout(function () { finishWin(true); }, 700);
-            else setTimeout(finishLose, 750);
-          }
-        });
+        if (!btn.isConnected) return;
+        btn.classList.add("flipped");
+        btn.setAttribute("aria-label", (deck[index] && deck[index].label) || "Card");
+        if (willWin || prevSame) btn.classList.add("match-ok");
+        else if (step > 0) btn.classList.add("mismatch");
+        playCardFlipSound();
+        try {
+          if (tg && tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
+        } catch (_) {}
+        if (attemptsLeft === 0) {
+          requestAnimationFrame(function () {
+            if (willWin) finishWin();
+            else if (pairWin) finishWin(true);
+            else finishLose();
+          });
+        }
       }
 
       function findMissedMatchIndex() {
@@ -2094,92 +2152,33 @@
       }
 
       function finishLose() {
+        playLoseSound();
+        try {
+          if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("error");
+        } catch (_) {}
+
         const cards = Array.from(boardEl.querySelectorAll(".card"));
         const thirdIdx = openedOrder[2];
         const thirdBtn = thirdIdx != null ? cardEl(thirdIdx) : null;
-        const openedFruits = openedOrder.map(function (i) {
-          return deck[i];
+        if (thirdBtn) thirdBtn.classList.add("shake", "mismatch");
+
+        cards.forEach((c) => {
+          const i = Number(c.dataset.index);
+          const openedHere = openedOrder.indexOf(i) !== -1;
+          if (!openedHere) {
+            c.classList.add("dim");
+            return;
+          }
+          if (!c.classList.contains("match-ok") && !c.classList.contains("mismatch")) {
+            c.classList.add("mismatch");
+          }
         });
-        const matchOpened = openedFruits.filter(function (f) {
-          return f && matchFruit && f.id === matchFruit.id;
-        }).length;
 
-        if (thirdBtn) thirdBtn.classList.add("shake");
-
-        setTimeout(() => {
-          if (thirdBtn) thirdBtn.classList.remove("shake");
-
-          cards.forEach((c) => {
-            const i = Number(c.dataset.index);
-            const fruit = deck[i];
-            const openedHere = openedOrder.indexOf(i) !== -1;
-            if (!openedHere) {
-              c.classList.add("dim");
-              return;
-            }
-            const twins = openedFruits.filter(function (f) {
-              return f && fruit && f.id === fruit.id;
-            }).length;
-            if (twins >= 2) c.classList.add("match-ok");
-            else c.classList.add("mismatch");
-          });
-
-          if (matchOpened >= 2) {
-            const missIdx = findMissedMatchIndex();
-            if (missIdx >= 0) {
-              ensureFruitAt(missIdx, matchFruit);
-              const missBtn = cardEl(missIdx);
-              if (missBtn) {
-                missBtn.classList.remove("dim");
-                missBtn.classList.add("flipped", "reveal-miss");
-                missBtn.disabled = true;
-                missBtn.setAttribute(
-                  "aria-label",
-                  (matchFruit && matchFruit.label) || "Found"
-                );
-              }
-            }
-          }
-
-          const lead = document.getElementById("loseLead");
-          if (lead) {
-            if (matchOpened >= 2 && matchFruit) {
-              lead.textContent =
-                "The third \"" + matchFruit.label + "\" was right there 👆 Try again!";
-            } else {
-              lead.textContent = "No three of a kind this time. Try again!";
-            }
-          }
-
-          // Дать рассмотреть подсветку, потом открыть остальные и модалку
-          setTimeout(() => {
-            cards.forEach((c) => {
-              if (!c.classList.contains("flipped")) {
-                c.classList.add("flipped", "dim");
-                c.disabled = true;
-                const i = Number(c.dataset.index);
-                c.setAttribute("aria-label", deck[i].label);
-              } else if (!c.classList.contains("reveal-miss") && !c.classList.contains("match-ok")) {
-                if (!c.classList.contains("mismatch")) c.classList.add("dim");
-              }
-            });
-
-            inRound = false;
-            locked = true;
-            boardEl.classList.add("locked");
-            refreshPlayUi();
-
-            setTimeout(() => {
-              loseOverlay.classList.add("show");
-              playLoseSound();
-              try {
-                if (tg && tg.HapticFeedback) {
-                  tg.HapticFeedback.notificationOccurred("error");
-                }
-              } catch (_) {}
-            }, 450);
-          }, 1600);
-        }, 600);
+        showResultFx("defeat");
+        inRound = false;
+        locked = true;
+        if (boardEl) boardEl.classList.add("locked");
+        refreshPlayUi();
       }
 
       function balanceTargetPoint() {
@@ -2240,8 +2239,8 @@
           const jy = (Math.random() - 0.5) * 70;
           const midX = origin.x + jx;
           const midY = origin.y + jy + 30;
-          const delay = 40 + i * 38 + Math.random() * 40;
-          const dur = 720 + Math.random() * 280;
+          const delay = i * 16;
+          const dur = 460 + Math.random() * 140;
           const anim = star.animate(
             [
               {
@@ -2330,126 +2329,83 @@
         if (pair && (!WIN_PRIZE || WIN_PRIZE <= 0)) {
           WIN_PRIZE = pairPrizeForStake(currentStake);
         }
-        prepareWinSheet();
         prizeClaimed = false;
 
-        setTimeout(() => {
-          cards.forEach((c) => {
-            if (!c.classList.contains("flipped")) {
-              c.classList.add("flipped", "dim");
-              c.disabled = true;
-              const i = Number(c.dataset.index);
-              c.setAttribute("aria-label", deck[i].label);
-            }
-          });
-          inRound = false;
-          locked = true;
-          boardEl.classList.add("locked");
-          refreshPlayUi();
-          setTimeout(() => {
-            winOverlay.classList.add("show");
-            if (pair) playSfx("coins", 0.7);
-            else playWinFanfare();
-            const cx = window.innerWidth / 2;
-            const cy = window.innerHeight * 0.36;
-            burstSparks(cx, cy, pair ? 12 : 22);
-            try {
-              if (tg && tg.HapticFeedback) {
-                tg.HapticFeedback.notificationOccurred("success");
-              }
-            } catch (_) {}
-          }, 350);
-        }, 900);
-      }
-
-      async function claimPrize() {
-        if (prizeClaimed || loading) return;
-        claimErr.textContent = "";
-        loading = true;
-        claimBtn.disabled = true;
-
-        try {
-          // Демо без сервера
-          if (!inTelegram && /[?&#]demo=1(?:&|$)/.test(location.href)) {
-            const next = balance + WIN_PRIZE;
-            prizeClaimed = true;
-            await playPrizeDrop(next);
-            onClaimSuccess(next);
-            return;
-          }
-
-          if (!sessionId) {
-            // Админ / сбой сессии — начислим только если есть session
-            claimErr.textContent = "Game session not found. Play again.";
-            claimBtn.disabled = false;
-            return;
-          }
-
-          const { res, data } = await apiPost(
-            "/api/claim",
-            authBody({ sessionId: sessionId })
-          );
-
-          if (data.ok) {
-            prizeClaimed = true;
-            const next =
-              typeof data.balance === "number" ? data.balance : balance + WIN_PRIZE;
-            const prizeAmt =
-              typeof data.prize === "number" && data.prize > 0 ? data.prize : WIN_PRIZE;
-            WIN_PRIZE = prizeAmt;
-            await playPrizeDrop(next);
-            onClaimSuccess(next);
-            return;
-          }
-
-          if (data.error === "already_claimed") {
-            prizeClaimed = true;
-            if (typeof data.balance === "number") setBalance(data.balance, true);
-            onClaimSuccess(data.balance);
-            claimOk.textContent = "Prize already claimed";
-            return;
-          }
-
-          throw new Error(data.message || data.error || "Withdraw failed");
-        } catch (e) {
-          console.error(e);
-          claimErr.textContent = e.message || "Withdraw error";
-          claimBtn.disabled = false;
-        } finally {
-          loading = false;
-        }
-      }
-
-      async function playPrizeDrop(nextBalance) {
-        const from = balance;
-        const originEl = winPrizeBig || claimBtn;
-        let origin = { x: window.innerWidth / 2, y: window.innerHeight * 0.4 };
-        if (originEl) {
-          const r = originEl.getBoundingClientRect();
-          origin = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-        }
-        const n = WIN_PRIZE >= 1000 ? 22 : WIN_PRIZE >= 500 ? 18 : 14;
-        burstSparks(origin.x, origin.y, 16);
-        const rain = rainStarsToBalance({ count: n, origin: origin });
-        setTimeout(function () {
-          countUpBalance(from, nextBalance, 780);
-        }, 380);
-        await rain;
-      }
-
-      function onClaimSuccess(bal) {
-        claimBtn.classList.add("hidden");
-        winAfterClaim.classList.remove("hidden");
-        claimOk.textContent =
-          "+" + WIN_PRIZE + " ⭐ added to your game balance" +
-          (typeof bal === "number" ? " · total " + bal : "") +
-          " 🎉";
-        hintLine.textContent = "Prize on game balance";
-        hintLine.className = "hint-line ok";
-        refreshPlayUi();
+        playWinFanfare();
         try {
           if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
         } catch (_) {}
+
+        showResultFx("victory", WIN_PRIZE);
+        inRound = false;
+        locked = true;
+        if (boardEl) boardEl.classList.add("locked");
+        refreshPlayUi();
+        autoClaimPrize();
+      }
+
+      function prizeOriginPoint() {
+        if (resultPrize) {
+          const r = resultPrize.getBoundingClientRect();
+          if (r.width) return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        }
+        return { x: window.innerWidth / 2, y: window.innerHeight * 0.38 };
+      }
+
+      function flyPrizeToBalance() {
+        const origin = prizeOriginPoint();
+        const n = WIN_PRIZE >= 1000 ? 18 : WIN_PRIZE >= 500 ? 14 : 11;
+        if (resultPrize) resultPrize.classList.add("burst");
+        burstSparks(origin.x, origin.y, pairWin ? 10 : 14);
+        rainStarsToBalance({ count: n, origin: origin });
+      }
+
+      async function autoClaimPrize() {
+        if (prizeClaimed) return;
+        const from = balance;
+        let next = from + WIN_PRIZE;
+
+        const claimP = (async function () {
+          try {
+            if (!inTelegram && /[?&#]demo=1(?:&|$)/.test(location.href)) {
+              prizeClaimed = true;
+              return true;
+            }
+            if (sessionId) {
+              const { data } = await apiPost(
+                "/api/claim",
+                authBody({ sessionId: sessionId })
+              );
+              if (data && data.ok) {
+                prizeClaimed = true;
+                if (typeof data.balance === "number") next = data.balance;
+                if (typeof data.prize === "number" && data.prize > 0) WIN_PRIZE = data.prize;
+                return true;
+              }
+              if (data && data.error === "already_claimed") {
+                prizeClaimed = true;
+                if (typeof data.balance === "number") next = data.balance;
+                return true;
+              }
+              return false;
+            }
+            if (isAdmin) {
+              prizeClaimed = true;
+              return true;
+            }
+          } catch (e) {
+            console.error(e);
+          }
+          return false;
+        })();
+
+        await new Promise(function (resolve) {
+          setTimeout(resolve, 140);
+        });
+        flyPrizeToBalance();
+
+        const claimed = await claimP;
+        if (claimed) countUpBalance(from, next, 480);
       }
 
       function withdrawAmount() {
@@ -2710,8 +2666,6 @@
       function setBusy(on) {
         loading = !!on;
         if (playBtn) playBtn.disabled = !!on;
-        if (retryBtn) retryBtn.disabled = !!on;
-        if (winRetryBtn) winRetryBtn.disabled = !!on;
         if (playBtn && on) {
           playBtn.dataset.prevText = playBtn.textContent;
           playBtn.textContent = "Loading…";
@@ -3068,49 +3022,18 @@
       }
 
       // Events
-      playBtn.addEventListener("click", async () => {
+      playBtn.addEventListener("pointerdown", function (e) {
+        if (playBtn.disabled) return;
+        if (e.pointerType === "mouse" && e.button !== 0) return;
         playPlaySound();
+      });
+      playBtn.addEventListener("click", async () => {
+        hideResultFx();
         if (!isAdmin && balance < currentStake) {
           openTopup();
           return;
         }
         await startPlayFromBalance(null);
-      });
-
-      retryBtn.addEventListener("click", async () => {
-        playPlaySound();
-        if (!isAdmin && balance < currentStake) {
-          loseOverlay.classList.remove("show");
-          openTopup();
-          return;
-        }
-        const ok = await startPlayFromBalance(retryErr);
-        if (ok) loseOverlay.classList.remove("show");
-      });
-
-      loseClose.addEventListener("click", () => {
-        loseOverlay.classList.remove("show");
-        prepareLobbyBoard();
-      });
-
-      claimBtn.addEventListener("click", () => {
-        claimPrize();
-      });
-
-      winRetryBtn.addEventListener("click", async () => {
-        playPlaySound();
-        if (!isAdmin && balance < currentStake) {
-          winOverlay.classList.remove("show");
-          openTopup();
-          return;
-        }
-        const ok = await startPlayFromBalance(claimErr);
-        if (ok) winOverlay.classList.remove("show");
-      });
-
-      winClose.addEventListener("click", () => {
-        winOverlay.classList.remove("show");
-        prepareLobbyBoard();
       });
 
       tgWithdrawBtn.addEventListener("click", openTgWithdraw);
