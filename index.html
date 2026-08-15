@@ -1045,12 +1045,23 @@
       text-shadow: 0 2px 0 #07070a, 0 0 10px rgba(0, 0, 0, 0.85);
     }
 
+    .result-fx.show .result-title {
+      animation: result-flash 1s ease both;
+    }
+
     .result-fx.victory .result-title {
       color: #f0d878;
     }
 
     .result-fx.defeat .result-title {
       color: #ff7a7a;
+    }
+
+    @keyframes result-flash {
+      0% { transform: scale(0.72); opacity: 0; }
+      16% { transform: scale(1.06); opacity: 1; }
+      72% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(0.98); opacity: 0; }
     }
 
     .result-prize {
@@ -1110,7 +1121,7 @@
 
     <div class="board-shell wait-play" id="boardShell">
       <div class="board locked preview" id="board" aria-label="Game board"></div>
-      <!-- v=2.11.0 no-modal result text -->
+      <!-- v=2.12.0 flash then auto-play -->
       <div class="result-fx" id="resultFx" aria-hidden="true">
         <div class="result-title" id="resultTitle"></div>
         <div class="result-prize hidden" id="resultPrize">
@@ -1310,6 +1321,8 @@
       let willWin = false;
       let pairWin = false;
       let prizeClaimed = false;
+      let betweenRounds = false;
+      let nextRoundTimer = 0;
       let forcedMatchId = "";
 
       const tg = window.Telegram && window.Telegram.WebApp;
@@ -1814,6 +1827,11 @@
             WIN_PRIZE = prizeForFruit(forcedMatchId);
           }
           prizeClaimed = false;
+          betweenRounds = false;
+          if (nextRoundTimer) {
+            clearTimeout(nextRoundTimer);
+            nextRoundTimer = 0;
+          }
 
           attemptsLeft = MAX_ATTEMPTS;
           if (attemptsEl) attemptsEl.textContent = String(attemptsLeft);
@@ -2014,7 +2032,7 @@
       }
 
       function requestPlay() {
-        if (loading || inRound) return;
+        if (loading || inRound || betweenRounds) return;
         hideResultFx();
         playPlaySound();
         if (!isAdmin && balance < currentStake) {
@@ -2022,6 +2040,32 @@
           return;
         }
         startPlayFromBalance(null);
+      }
+
+      function scheduleNextRound() {
+        if (nextRoundTimer) clearTimeout(nextRoundTimer);
+        betweenRounds = true;
+        if (playArea) playArea.classList.add("hidden");
+        nextRoundTimer = setTimeout(function () {
+          nextRoundTimer = 0;
+          hideResultFx();
+          if (loading) {
+            betweenRounds = false;
+            refreshPlayUi();
+            return;
+          }
+          if (!isAdmin && balance < currentStake) {
+            betweenRounds = false;
+            refreshPlayUi();
+            return;
+          }
+          startPlayFromBalance(null).then(function (ok) {
+            if (!ok) {
+              betweenRounds = false;
+              refreshPlayUi();
+            }
+          });
+        }, 1000);
       }
 
       function onCardClick(index, btn) {
@@ -2102,7 +2146,8 @@
         inRound = false;
         locked = true;
         if (boardEl) boardEl.classList.add("locked");
-        refreshPlayUi();
+        if (playArea) playArea.classList.add("hidden");
+        scheduleNextRound();
       }
 
       function balanceTargetPoint() {
@@ -2264,8 +2309,9 @@
         inRound = false;
         locked = true;
         if (boardEl) boardEl.classList.add("locked");
-        refreshPlayUi();
+        if (playArea) playArea.classList.add("hidden");
         autoClaimPrize();
+        scheduleNextRound();
       }
 
       function prizeOriginPoint() {
