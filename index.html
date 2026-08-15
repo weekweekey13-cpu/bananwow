@@ -900,17 +900,23 @@
       top: 0;
       z-index: 91;
       pointer-events: none;
-      font-size: 20px;
+      font-size: 30px;
       line-height: 1;
+      text-shadow:
+        0 0 8px rgba(255, 236, 160, 0.95),
+        0 0 16px rgba(240, 216, 120, 0.75);
     }
+
+    .fly-star.sm { font-size: 22px; }
+    .fly-star.lg { font-size: 38px; }
 
     .spark {
       position: fixed;
       left: 0;
       top: 0;
       z-index: 89;
-      width: 6px;
-      height: 6px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
       pointer-events: none;
       background: radial-gradient(circle, #fff8d0 0%, #e0c05a 55%, transparent 80%);
@@ -1070,19 +1076,34 @@
       justify-content: center;
       gap: 6px;
       margin-top: 8px;
-      font-size: 1.55rem;
+      font-size: 1.7rem;
       font-weight: 800;
       color: var(--gold);
       font-variant-numeric: tabular-nums;
-      text-shadow: 0 2px 0 #07070a, 0 0 8px rgba(0, 0, 0, 0.8);
+      text-shadow: 0 2px 0 #07070a, 0 0 12px rgba(240, 216, 120, 0.55);
+    }
+
+    .result-fx.show .result-prize {
+      animation: prize-hold 0.28s ease both;
     }
 
     .result-prize .star {
-      font-size: 1.2rem;
+      font-size: 1.35rem;
     }
 
     .result-prize.burst {
-      opacity: 0;
+      animation: result-prize-burst 0.38s ease forwards;
+    }
+
+    @keyframes prize-hold {
+      0% { transform: scale(0.7); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes result-prize-burst {
+      0% { transform: scale(1); opacity: 1; }
+      35% { transform: scale(1.28); opacity: 1; }
+      100% { transform: scale(0.35); opacity: 0; }
     }
 
     .hidden { display: none !important; }
@@ -1121,7 +1142,7 @@
 
     <div class="board-shell wait-play" id="boardShell">
       <div class="board locked preview" id="board" aria-label="Game board"></div>
-      <!-- v=2.12.0 flash then auto-play -->
+      <!-- v=2.12.1 richer star flight -->
       <div class="result-fx" id="resultFx" aria-hidden="true">
         <div class="result-title" id="resultTitle"></div>
         <div class="result-prize hidden" id="resultPrize">
@@ -2042,7 +2063,7 @@
         startPlayFromBalance(null);
       }
 
-      function scheduleNextRound() {
+      function scheduleNextRound(ms) {
         if (nextRoundTimer) clearTimeout(nextRoundTimer);
         betweenRounds = true;
         if (playArea) playArea.classList.add("hidden");
@@ -2065,7 +2086,7 @@
               refreshPlayUi();
             }
           });
-        }, 1000);
+        }, ms || 1000);
       }
 
       function onCardClick(index, btn) {
@@ -2147,7 +2168,7 @@
         locked = true;
         if (boardEl) boardEl.classList.add("locked");
         if (playArea) playArea.classList.add("hidden");
-        scheduleNextRound();
+        scheduleNextRound(900);
       }
 
       function balanceTargetPoint() {
@@ -2190,51 +2211,72 @@
 
       function rainStarsToBalance(opts) {
         opts = opts || {};
-        const count = opts.count || 16;
+        const count = opts.count || 14;
         const origin = opts.origin || {
           x: window.innerWidth / 2,
           y: window.innerHeight * 0.38,
         };
         const dest = balanceTargetPoint();
-        playCoinRainSound(count);
+        playCoinRainSound();
         if (!starRain) return Promise.resolve();
         const waits = [];
         for (let i = 0; i < count; i++) {
           const star = document.createElement("div");
-          star.className = "fly-star";
+          const size = i % 5 === 0 ? "lg" : i % 3 === 0 ? "sm" : "";
+          star.className = "fly-star" + (size ? " " + size : "");
           star.textContent = "⭐";
           starRain.appendChild(star);
-          const jx = (Math.random() - 0.5) * 140;
-          const jy = (Math.random() - 0.5) * 70;
-          const midX = origin.x + jx;
-          const midY = origin.y + jy + 30;
-          const delay = i * 12;
-          const dur = 380 + Math.random() * 80;
+          const side = i % 2 === 0 ? 1 : -1;
+          const burstX = origin.x + side * (28 + (i % 6) * 16) + (Math.random() - 0.5) * 24;
+          const burstY = origin.y - 36 - (i % 5) * 10 - Math.random() * 28;
+          const midX = origin.x + (dest.x - origin.x) * 0.42 + side * (70 + Math.random() * 80);
+          const midY = origin.y + (dest.y - origin.y) * 0.22 - 50 - Math.random() * 40;
+          const delay = 90 + i * 48;
+          const dur = 1120 + Math.random() * 220;
+          const spin = 260 + i * 18;
           const anim = star.animate(
             [
               {
-                transform: "translate(" + (origin.x - 10) + "px," + origin.y + "px) scale(0.4)",
+                transform:
+                  "translate(" + (origin.x - 12) + "px," + (origin.y - 12) + "px) scale(0.25) rotate(0deg)",
                 opacity: 0,
               },
               {
-                transform: "translate(" + midX + "px," + midY + "px) scale(1.15)",
+                transform:
+                  "translate(" + (burstX - 12) + "px," + (burstY - 12) + "px) scale(1.35) rotate(" +
+                  spin * 0.28 +
+                  "deg)",
                 opacity: 1,
-                offset: 0.28,
+                offset: 0.2,
               },
               {
-                transform: "translate(" + dest.x + "px," + dest.y + "px) scale(0.35)",
-                opacity: 0.95,
-                offset: 0.88,
+                transform:
+                  "translate(" + (midX - 12) + "px," + (midY - 12) + "px) scale(1.18) rotate(" +
+                  spin * 0.62 +
+                  "deg)",
+                opacity: 1,
+                offset: 0.52,
               },
               {
-                transform: "translate(" + dest.x + "px," + dest.y + "px) scale(0.1)",
+                transform:
+                  "translate(" + (dest.x - 8) + "px," + (dest.y - 8) + "px) scale(0.62) rotate(" +
+                  spin +
+                  "deg)",
+                opacity: 1,
+                offset: 0.86,
+              },
+              {
+                transform:
+                  "translate(" + (dest.x - 8) + "px," + (dest.y - 8) + "px) scale(0.12) rotate(" +
+                  (spin + 40) +
+                  "deg)",
                 opacity: 0,
               },
             ],
             {
               duration: dur,
               delay: delay,
-              easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+              easing: "cubic-bezier(0.22, 0.82, 0.2, 1)",
               fill: "forwards",
             }
           );
@@ -2247,6 +2289,16 @@
             })
           );
         }
+        burstSparks(origin.x, origin.y, 12);
+        setTimeout(function () {
+          burstSparks(dest.x, dest.y, 8);
+          if (balanceValue) {
+            balanceValue.classList.remove("bump");
+            requestAnimationFrame(function () {
+              balanceValue.classList.add("bump");
+            });
+          }
+        }, 720);
         return Promise.all(waits);
       }
 
@@ -2311,7 +2363,7 @@
         if (boardEl) boardEl.classList.add("locked");
         if (playArea) playArea.classList.add("hidden");
         autoClaimPrize();
-        scheduleNextRound();
+        scheduleNextRound(1400);
       }
 
       function prizeOriginPoint() {
@@ -2324,9 +2376,11 @@
 
       function flyPrizeToBalance() {
         const origin = prizeOriginPoint();
-        const n = WIN_PRIZE >= 500 ? 8 : 6;
-        if (resultPrize) resultPrize.classList.add("burst");
-        rainStarsToBalance({ count: n, origin: origin });
+        const n = WIN_PRIZE >= 1000 ? 16 : WIN_PRIZE >= 200 ? 14 : 12;
+        setTimeout(function () {
+          if (resultPrize) resultPrize.classList.add("burst");
+          rainStarsToBalance({ count: n, origin: origin });
+        }, 220);
       }
 
       async function autoClaimPrize() {
@@ -2371,7 +2425,11 @@
         flyPrizeToBalance();
 
         const claimed = await claimP;
-        if (claimed) countUpBalance(from, next, 480);
+        if (claimed) {
+          setTimeout(function () {
+            countUpBalance(from, next, 920);
+          }, 520);
+        }
       }
 
       function withdrawAmount() {
@@ -3091,11 +3149,11 @@
           const r = originEl.getBoundingClientRect();
           origin = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
         }
-        burstSparks(origin.x, origin.y, 18);
-        const rain = rainStarsToBalance({ count: 20, origin: origin });
+        burstSparks(origin.x, origin.y, 12);
+        const rain = rainStarsToBalance({ count: 14, origin: origin });
         setTimeout(function () {
-          countUpBalance(from, nextBalance, 820);
-        }, 320);
+          countUpBalance(from, nextBalance, 920);
+        }, 480);
         try {
           if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
         } catch (_) {}
