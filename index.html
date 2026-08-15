@@ -903,12 +903,25 @@
       font-size: 30px;
       line-height: 1;
       text-shadow:
-        0 0 8px rgba(255, 236, 160, 0.95),
-        0 0 16px rgba(240, 216, 120, 0.75);
+        0 0 10px rgba(255, 244, 180, 1),
+        0 0 22px rgba(240, 216, 120, 0.9);
     }
 
     .fly-star.sm { font-size: 22px; }
     .fly-star.lg { font-size: 38px; }
+
+    .star-boom {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 232, 150, 0.95);
+      box-shadow: 0 0 18px rgba(240, 216, 120, 0.7);
+      pointer-events: none;
+      z-index: 88;
+    }
 
     .spark {
       position: fixed;
@@ -1142,7 +1155,7 @@
 
     <div class="board-shell wait-play" id="boardShell">
       <div class="board locked preview" id="board" aria-label="Game board"></div>
-      <!-- v=2.12.2 straight stars, stake anytime -->
+      <!-- v=2.13.0 star fountain then magnet to balance -->
       <div class="result-fx" id="resultFx" aria-hidden="true">
         <div class="result-title" id="resultTitle"></div>
         <div class="result-prize hidden" id="resultPrize">
@@ -2208,9 +2221,32 @@
         }
       }
 
+      function boomRing(cx, cy) {
+        if (!starRain) return;
+        const el = document.createElement("div");
+        el.className = "star-boom";
+        starRain.appendChild(el);
+        const anim = el.animate(
+          [
+            {
+              transform: "translate(" + (cx - 11) + "px," + (cy - 11) + "px) scale(0.35)",
+              opacity: 0.95,
+            },
+            {
+              transform: "translate(" + (cx - 11) + "px," + (cy - 11) + "px) scale(6.5)",
+              opacity: 0,
+            },
+          ],
+          { duration: 480, easing: "cubic-bezier(0.16, 1, 0.3, 1)", fill: "forwards" }
+        );
+        anim.onfinish = function () {
+          if (el.parentNode) el.parentNode.removeChild(el);
+        };
+      }
+
       function rainStarsToBalance(opts) {
         opts = opts || {};
-        const count = opts.count || 14;
+        const count = opts.count || 13;
         const origin = opts.origin || {
           x: window.innerWidth / 2,
           y: window.innerHeight * 0.38,
@@ -2218,73 +2254,84 @@
         const dest = balanceTargetPoint();
         playCoinRainSound();
         if (!starRain) return Promise.resolve();
+        boomRing(origin.x, origin.y);
+        burstSparks(origin.x, origin.y, 14);
         const waits = [];
-        const ox = origin.x - 12;
-        const oy = origin.y - 12;
-        const ex = dest.x - 8;
-        const ey = dest.y - 8;
-        const vx = ex - ox;
-        const vy = ey - oy;
-        const len = Math.sqrt(vx * vx + vy * vy) || 1;
-        const px = -vy / len;
-        const py = vx / len;
+        const ring = Math.min(92, Math.max(68, window.innerWidth * 0.2));
+        const sx = origin.x - 14;
+        const sy = origin.y - 14;
+        const tx = dest.x - 10;
+        const ty = dest.y - 10;
         for (let i = 0; i < count; i++) {
           const star = document.createElement("div");
-          const size = i % 5 === 0 ? "lg" : i % 3 === 0 ? "sm" : "";
-          star.className = "fly-star" + (size ? " " + size : "");
+          star.className = "fly-star" + (i % 4 === 0 ? " lg" : i % 3 === 0 ? " sm" : "");
           star.textContent = "⭐";
           starRain.appendChild(star);
-          const spread = (i / Math.max(1, count - 1) - 0.5) * 20;
-          const sx = ox + px * spread;
-          const sy = oy + py * spread;
-          const tx = ex + px * spread * 0.25;
-          const ty = ey + py * spread * 0.25;
-          const delay = i * 38;
-          const anim = star.animate(
+          const ang = (Math.PI * 2 * i) / count - Math.PI / 2;
+          const bx = origin.x + Math.cos(ang) * ring - 14;
+          const by = origin.y + Math.sin(ang) * ring - 14;
+          const delay = i * 16;
+          const pop = star.animate(
             [
               {
-                transform: "translate(" + sx + "px," + sy + "px) scale(0.4)",
+                transform: "translate(" + sx + "px," + sy + "px) scale(0.15)",
                 opacity: 0,
               },
               {
-                transform: "translate(" + sx + "px," + sy + "px) scale(1.12)",
+                transform: "translate(" + bx + "px," + by + "px) scale(1.28)",
                 opacity: 1,
-                offset: 0.1,
-              },
-              {
-                transform: "translate(" + tx + "px," + ty + "px) scale(0.72)",
-                opacity: 1,
-                offset: 0.88,
-              },
-              {
-                transform: "translate(" + tx + "px," + ty + "px) scale(0.18)",
-                opacity: 0,
               },
             ],
             {
-              duration: 1000,
+              duration: 360,
               delay: delay,
-              easing: "linear",
+              easing: "cubic-bezier(0.16, 1, 0.3, 1)",
               fill: "forwards",
             }
           );
           waits.push(
             new Promise(function (resolve) {
-              anim.onfinish = function () {
-                if (star.parentNode) star.parentNode.removeChild(star);
-                resolve();
+              pop.onfinish = function () {
+                const fly = star.animate(
+                  [
+                    {
+                      transform: "translate(" + bx + "px," + by + "px) scale(1.28)",
+                      opacity: 1,
+                    },
+                    {
+                      transform: "translate(" + tx + "px," + ty + "px) scale(0.38)",
+                      opacity: 1,
+                      offset: 0.9,
+                    },
+                    {
+                      transform: "translate(" + tx + "px," + ty + "px) scale(0.08)",
+                      opacity: 0,
+                    },
+                  ],
+                  {
+                    duration: 640,
+                    delay: 80,
+                    easing: "cubic-bezier(0.55, 0.02, 0.18, 1)",
+                    fill: "forwards",
+                  }
+                );
+                fly.onfinish = function () {
+                  if (star.parentNode) star.parentNode.removeChild(star);
+                  resolve();
+                };
               };
             })
           );
         }
         setTimeout(function () {
+          burstSparks(dest.x, dest.y, 10);
           if (balanceValue) {
             balanceValue.classList.remove("bump");
             requestAnimationFrame(function () {
               balanceValue.classList.add("bump");
             });
           }
-        }, 820);
+        }, 920);
         return Promise.all(waits);
       }
 
