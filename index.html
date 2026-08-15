@@ -1142,7 +1142,7 @@
 
     <div class="board-shell wait-play" id="boardShell">
       <div class="board locked preview" id="board" aria-label="Game board"></div>
-      <!-- v=2.12.1 richer star flight -->
+      <!-- v=2.12.2 straight stars, stake anytime -->
       <div class="result-fx" id="resultFx" aria-hidden="true">
         <div class="result-title" id="resultTitle"></div>
         <div class="result-prize hidden" id="resultPrize">
@@ -1513,8 +1513,7 @@
           if (stakeRange.value !== String(v)) stakeRange.value = String(v);
         }
         updateStakeLabels(v);
-        // при драге ползунка — только лейблы; полный UI в конце (change)
-        if (!fromUi && changed && !inRound) schedulePlayUi();
+        if (!fromUi && changed) schedulePlayUi();
       }
 
       function renderStakePresets() {
@@ -1546,7 +1545,7 @@
         if (prizeLabel) prizeLabel.textContent = previewPrize() + " ⭐";
 
         if (stakeBox) {
-          stakeBox.classList.toggle("disabled", !!inRound);
+          stakeBox.classList.remove("disabled");
         }
 
         const canTg = balance >= TG_WITHDRAW_MIN;
@@ -2220,63 +2219,52 @@
         playCoinRainSound();
         if (!starRain) return Promise.resolve();
         const waits = [];
+        const ox = origin.x - 12;
+        const oy = origin.y - 12;
+        const ex = dest.x - 8;
+        const ey = dest.y - 8;
+        const vx = ex - ox;
+        const vy = ey - oy;
+        const len = Math.sqrt(vx * vx + vy * vy) || 1;
+        const px = -vy / len;
+        const py = vx / len;
         for (let i = 0; i < count; i++) {
           const star = document.createElement("div");
           const size = i % 5 === 0 ? "lg" : i % 3 === 0 ? "sm" : "";
           star.className = "fly-star" + (size ? " " + size : "");
           star.textContent = "⭐";
           starRain.appendChild(star);
-          const side = i % 2 === 0 ? 1 : -1;
-          const burstX = origin.x + side * (28 + (i % 6) * 16) + (Math.random() - 0.5) * 24;
-          const burstY = origin.y - 36 - (i % 5) * 10 - Math.random() * 28;
-          const midX = origin.x + (dest.x - origin.x) * 0.42 + side * (70 + Math.random() * 80);
-          const midY = origin.y + (dest.y - origin.y) * 0.22 - 50 - Math.random() * 40;
-          const delay = 90 + i * 48;
-          const dur = 1120 + Math.random() * 220;
-          const spin = 260 + i * 18;
+          const spread = (i / Math.max(1, count - 1) - 0.5) * 20;
+          const sx = ox + px * spread;
+          const sy = oy + py * spread;
+          const tx = ex + px * spread * 0.25;
+          const ty = ey + py * spread * 0.25;
+          const delay = i * 38;
           const anim = star.animate(
             [
               {
-                transform:
-                  "translate(" + (origin.x - 12) + "px," + (origin.y - 12) + "px) scale(0.25) rotate(0deg)",
+                transform: "translate(" + sx + "px," + sy + "px) scale(0.4)",
                 opacity: 0,
               },
               {
-                transform:
-                  "translate(" + (burstX - 12) + "px," + (burstY - 12) + "px) scale(1.35) rotate(" +
-                  spin * 0.28 +
-                  "deg)",
+                transform: "translate(" + sx + "px," + sy + "px) scale(1.12)",
                 opacity: 1,
-                offset: 0.2,
+                offset: 0.1,
               },
               {
-                transform:
-                  "translate(" + (midX - 12) + "px," + (midY - 12) + "px) scale(1.18) rotate(" +
-                  spin * 0.62 +
-                  "deg)",
+                transform: "translate(" + tx + "px," + ty + "px) scale(0.72)",
                 opacity: 1,
-                offset: 0.52,
+                offset: 0.88,
               },
               {
-                transform:
-                  "translate(" + (dest.x - 8) + "px," + (dest.y - 8) + "px) scale(0.62) rotate(" +
-                  spin +
-                  "deg)",
-                opacity: 1,
-                offset: 0.86,
-              },
-              {
-                transform:
-                  "translate(" + (dest.x - 8) + "px," + (dest.y - 8) + "px) scale(0.12) rotate(" +
-                  (spin + 40) +
-                  "deg)",
+                transform: "translate(" + tx + "px," + ty + "px) scale(0.18)",
                 opacity: 0,
               },
             ],
             {
-              duration: dur,
+              duration: 1000,
               delay: delay,
-              easing: "cubic-bezier(0.22, 0.82, 0.2, 1)",
+              easing: "linear",
               fill: "forwards",
             }
           );
@@ -2289,16 +2277,14 @@
             })
           );
         }
-        burstSparks(origin.x, origin.y, 12);
         setTimeout(function () {
-          burstSparks(dest.x, dest.y, 8);
           if (balanceValue) {
             balanceValue.classList.remove("bump");
             requestAnimationFrame(function () {
               balanceValue.classList.add("bump");
             });
           }
-        }, 720);
+        }, 820);
         return Promise.all(waits);
       }
 
